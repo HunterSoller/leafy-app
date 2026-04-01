@@ -147,9 +147,12 @@ export async function createPlant(payload) {
   await addDoc(collection(db, 'plants'), {
     groupId,
     name: payload.name,
+    displayName: payload.displayName ?? payload.name ?? '',
     type: payload.type ?? '',
     location: payload.location ?? 'indoor',
-    potSize: payload.potSize ?? 'M',
+    potSize: payload.potSize !== undefined && payload.potSize !== null
+      ? payload.potSize
+      : '',
     imageUrl: payload.imageUrl ?? null,
     wateringIntervalDays:
       payload.wateringIntervalDays ?? payload.wateringFrequencyDays ?? 7,
@@ -172,6 +175,15 @@ export async function createPlant(payload) {
     nextWaterDue: nextDue,
     notes: payload.notes ?? '',
     createdAt: now,
+    detectedType: payload.detectedType ?? '',
+    matchKind: payload.matchKind ?? null,
+    sceneType: payload.sceneType ?? null,
+    confidence: payload.confidence ?? null,
+    aiGenerated: payload.aiGenerated ?? false,
+    imageAnalyzedAt: payload.aiGenerated ? now : null,
+    aiCorrectedByUser: payload.aiCorrectedByUser ?? false,
+    aiSuggestedDisplayName: payload.aiSuggestedDisplayName ?? null,
+    fallbackUsed: payload.fallbackUsed ?? false,
   })
 }
 

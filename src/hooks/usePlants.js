@@ -8,7 +8,7 @@ import {
   timestampFromDate,
 } from '../lib/firebase'
 import { useGroupId } from './useGroupId'
-import { generateCareRecommendation } from '../lib/plantCareRules'
+import { generateCareRecommendation, normalizePlantName } from '../lib/plantCareRules'
 
 function isFirebaseConfigured() {
   return Boolean(
@@ -17,11 +17,30 @@ function isFirebaseConfigured() {
   )
 }
 
+function careFromNormalizedAi(normalized) {
+  return {
+    type: normalized.typeLabel,
+    wateringIntervalDays: normalized.wateringIntervalDays,
+    wateringFrequencyDays: normalized.wateringIntervalDays,
+    waterAmountText: normalized.waterAmountText,
+    waterAmount: normalized.waterAmountText,
+    howToWaterText: normalized.howToWaterText,
+    wateringMethod: normalized.howToWaterText,
+    warningSignsText: normalized.warningSignsText,
+    warningSign: normalized.warningSignsText,
+    careMatchQuality: normalized.careMatchQuality,
+    scheduleNote: normalized.scheduleNote,
+    nextWaterDue: timestampFromDate(normalized.nextWateringAt),
+  }
+}
+
 function careDocumentFields(payload, lastWateredAt, meta = {}) {
   const care = generateCareRecommendation({
     plantName: payload.name,
     environment: payload.location,
-    potSize: payload.potSize || 'M',
+    potSize: payload.potSize || '',
+    sceneType: payload.sceneType,
+    matchKind: payload.matchKind,
     lastWateredAt,
     jitterKey: meta.jitterKey ?? payload.name,
     jitterEventIndex: meta.jitterEventIndex ?? 0,
@@ -40,6 +59,11 @@ function careDocumentFields(payload, lastWateredAt, meta = {}) {
     scheduleNote: care.scheduleNote,
     nextWaterDue: timestampFromDate(care.nextWateringAt),
   }
+}
+
+/** Slug for detectedType when using rules-only path */
+function slugFromName(name) {
+  return normalizePlantName(name).replace(/\s+/g, '_').slice(0, 48) || 'plant'
 }
 
 export function usePlants() {
@@ -69,20 +93,45 @@ export function usePlants() {
 
   const addPlant = useCallback(
     async (payload) => {
-      const care = careDocumentFields(payload, null, {
-        jitterKey: payload.name,
-        jitterEventIndex: 0,
-      })
+      const {
+        aiNormalized,
+        aiCorrectedByUser = false,
+        aiSuggestedDisplayName,
+        aiFallback = false,
+        ...rest
+      } = payload
+
+      const useAiCare = !!(aiNormalized && !aiCorrectedByUser)
+      const care = useAiCare
+        ? careFromNormalizedAi(aiNormalized)
+        : careDocumentFields(rest, null, {
+            jitterKey: rest.name,
+            jitterEventIndex: 0,
+          })
+
+      const n = aiNormalized
+
       await createPlant({
         groupId,
-        name: payload.name,
-        location: payload.location,
-        potSize: payload.potSize || 'M',
-        imageUrl: payload.imageUrl ?? null,
+        name: rest.name,
+        location: rest.location,
+        potSize: rest.potSize ?? '',
+        imageUrl: rest.imageUrl ?? null,
         lastWatered: null,
         notes: '',
         totalWaterCount: 0,
         ...care,
+        displayName: rest.name,
+        detectedType: useAiCare
+          ? n.detectedType
+          : slugFromName(rest.name),
+        matchKind: useAiCare ? n.matchKind : 'specific',
+        sceneType: useAiCare ? n.sceneType : 'single_plant',
+        confidence: useAiCare ? n.confidence : null,
+        aiGenerated: Boolean(n),
+        aiCorrectedByUser: Boolean(aiCorrectedByUser && n),
+        aiSuggestedDisplayName: aiSuggestedDisplayName ?? n?.displayName ?? null,
+        fallbackUsed: n ? n.fallbackUsed : aiFallback,
       })
     },
     [groupId],
@@ -90,18 +139,34 @@ export function usePlants() {
 
   const updatePlant = useCallback(
     async (id, payload) => {
-      const { lastWateredAtForCare, totalWaterCountForCare, ...rest } = payload
+      const {
+        lastWateredAtForCare,
+        totalWaterCountForCare,
+        aiCorrectedByUser: aiCorrectedFlag,
+        ...rest
+      } = payload
+
       const care = careDocumentFields(rest, lastWateredAtForCare ?? null, {
         jitterKey: id,
         jitterEventIndex: totalWaterCountForCare ?? 0,
       })
+
+      const corrected =
+        aiCorrectedFlag === true || rest.aiCorrectedByUser === true
+
       await savePlant(id, {
         name: rest.name,
         location: rest.location,
-        potSize: rest.potSize || 'M',
+        potSize: rest.potSize ?? '',
         imageUrl: rest.imageUrl ?? null,
         groupId,
+        displayName: rest.displayName ?? rest.name,
         ...care,
+        detectedType: slugFromName(rest.name),
+        matchKind: 'specific',
+        sceneType: 'single_plant',
+        confidence: null,
+        ...(corrected ? { aiCorrectedByUser: true } : {}),
       })
     },
     [groupId],

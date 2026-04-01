@@ -1250,6 +1250,63 @@ body {
   margin: 0 0 8px;
 }
 
+.ai-status-msg {
+  margin: 16px 0 0;
+  padding: 14px 16px;
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--bark-muted);
+  background: rgba(255, 255, 255, 0.75);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--mist-soft);
+}
+
+.ai-soft-error {
+  margin: 16px 0 0;
+  padding: 14px 16px;
+  background: rgba(193, 96, 58, 0.08);
+  border: 1px solid rgba(193, 96, 58, 0.25);
+  border-radius: var(--radius-md);
+}
+
+.ai-soft-error p {
+  margin: 0 0 8px;
+  font-size: 14px;
+  color: var(--bark);
+}
+
+.ai-soft-error p:last-child {
+  margin-bottom: 0;
+}
+
+.btn-text-link {
+  margin-top: 10px;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--moss);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.btn-text-link:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.ai-review-strong {
+  color: var(--moss);
+}
+
+.ai-review-confidence {
+  font-weight: 500;
+  color: var(--bark-muted);
+}
+
 .upload-zone {
   display: block;
   border: 2px dashed var(--mist);
@@ -1511,4 +1568,276 @@ body {
 
 .app-shell button {
   touch-action: manipulation;
+}
+
+/* --- Add plant: premium / AI flow --- */
+.drawer--analyzing .drawer-footer {
+  opacity: 0.42;
+  pointer-events: none;
+}
+
+.ai-loading-premium {
+  position: relative;
+  text-align: center;
+  padding: 28px 12px 48px;
+  min-height: 200px;
+}
+
+.ai-loading-glow {
+  position: absolute;
+  left: 50%;
+  top: 40%;
+  width: 120px;
+  height: 120px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    rgba(138, 175, 133, 0.35) 0%,
+    rgba(247, 243, 237, 0) 70%
+  );
+  animation: ai-glow-pulse 2.8s ease-in-out infinite;
+}
+
+@keyframes ai-glow-pulse {
+  0%,
+  100% {
+    opacity: 0.65;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.06);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ai-loading-glow {
+    animation: none;
+    opacity: 0.5;
+  }
+}
+
+.drawer-title--center {
+  text-align: center;
+  position: relative;
+  z-index: 1;
+}
+
+.drawer-lede--center {
+  text-align: center;
+  max-width: 280px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.drawer-lede--tight {
+  margin-top: 6px;
+  margin-bottom: 20px;
+}
+
+.field--hero-upload {
+  margin-bottom: 22px;
+}
+
+.upload-zone--premium {
+  min-height: 200px;
+  border-radius: var(--radius-lg);
+  border: 1.5px solid rgba(138, 175, 133, 0.45);
+  background: linear-gradient(
+    165deg,
+    rgba(255, 255, 255, 0.92) 0%,
+    rgba(232, 240, 231, 0.35) 100%
+  );
+  box-shadow: var(--shadow-lift);
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.25s ease;
+}
+
+.upload-zone--premium:active {
+  border-color: var(--moss);
+  box-shadow: 0 6px 28px rgba(74, 103, 65, 0.12);
+}
+
+.upload-placeholder--premium {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 32px 20px;
+  text-align: center;
+}
+
+.upload-cam-premium {
+  width: 56px;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: rgba(74, 103, 65, 0.12);
+  color: var(--moss);
+  font-size: 1.75rem;
+  font-weight: 300;
+  line-height: 1;
+}
+
+.upload-primary-line {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--bark);
+  letter-spacing: -0.02em;
+}
+
+.upload-secondary-line {
+  font-size: 12px;
+  color: var(--bark-muted);
+  max-width: 240px;
+  line-height: 1.35;
+}
+
+.field-micro--center {
+  text-align: center;
+  margin-top: 8px;
+}
+
+.field--secondary-name {
+  margin-bottom: 14px;
+}
+
+.field-label-subtle {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--bark-muted);
+}
+
+.field-input--soft {
+  background: rgba(255, 255, 255, 0.88);
+  border-color: rgba(184, 201, 181, 0.55);
+  font-size: 15px;
+}
+
+.btn-disclosure {
+  display: block;
+  width: 100%;
+  margin: 0 0 18px;
+  padding: 12px 14px;
+  border: 1px dashed var(--mist);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.5);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--moss);
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.btn-disclosure:active:not(:disabled) {
+  background: rgba(74, 103, 65, 0.08);
+}
+
+.btn-disclosure:disabled {
+  opacity: 0.5;
+}
+
+.btn-primary--premium:disabled {
+  opacity: 0.72;
+}
+
+.btn-ghost-inline {
+  border: none;
+  background: transparent;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--moss);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.add-confirm-panel {
+  padding-bottom: 8px;
+}
+
+.add-confirm-lead {
+  font-size: 17px;
+  line-height: 1.45;
+  color: var(--bark);
+  margin: 0 0 12px;
+}
+
+.add-confirm-name {
+  font-weight: 700;
+  color: var(--moss);
+}
+
+.add-confirm-hint {
+  margin: 0 0 22px;
+  font-size: 14px;
+  color: var(--bark-muted);
+  line-height: 1.45;
+}
+
+.care-plan-toast {
+  margin: 12px 20px 0;
+  padding: 14px 18px;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: center;
+  color: var(--bark);
+  background: linear-gradient(
+    100deg,
+    rgba(255, 255, 255, 0.95),
+    rgba(232, 240, 231, 0.92)
+  );
+  border: 1px solid rgba(138, 175, 133, 0.45);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lift);
+  animation: toast-in 0.35s ease both;
+}
+
+.care-plan-toast-name {
+  color: #3d5c36;
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .care-plan-toast {
+    animation: none;
+  }
+}
+
+.plant-scene-chip {
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  background: rgba(184, 201, 181, 0.45);
+  color: #3d4c3a;
+}
+
+.plant-provenance {
+  margin: -6px 0 12px;
+  font-size: 12px;
+  font-weight: 500;
+  color: rgba(74, 55, 40, 0.52);
+  letter-spacing: 0.02em;
 }

@@ -70,6 +70,7 @@ export function Dashboard() {
   const [firstPlantTip, setFirstPlantTip] = useState(false)
   const [flashPlantId, setFlashPlantId] = useState(null)
   const [allSetToday, setAllSetToday] = useState(false)
+  const [carePlanToast, setCarePlanToast] = useState(null)
 
   const urgentSectionRef = useRef(null)
   const didAutoScrollRef = useRef(false)
@@ -174,6 +175,17 @@ export function Dashboard() {
     setPlantToEdit(null)
   }, [])
 
+  const onPhotoPlanReady = useCallback((displayName) => {
+    const t = displayName?.trim()
+    setCarePlanToast(t || null)
+  }, [])
+
+  useEffect(() => {
+    if (!carePlanToast) return undefined
+    const t = window.setTimeout(() => setCarePlanToast(null), 4200)
+    return () => window.clearTimeout(t)
+  }, [carePlanToast])
+
   const handleDelete = useCallback((plant) => {
     setConfirmDelete(plant)
   }, [])
@@ -241,6 +253,13 @@ export function Dashboard() {
           All set for today — nothing else needs water right now.
         </div>
       )}
+
+      {carePlanToast ? (
+        <div className="care-plan-toast" role="status">
+          Care plan ready for{' '}
+          <span className="care-plan-toast-name">{carePlanToast}</span>
+        </div>
+      ) : null}
 
       <main className="app-main">
         {loading && (
@@ -318,6 +337,7 @@ export function Dashboard() {
         onClose={closeDrawer}
         onCreate={addPlantAndMaybeCelebrate}
         onUpdate={updatePlant}
+        onPhotoPlanReady={onPhotoPlanReady}
       />
 
       <ConfirmDialog

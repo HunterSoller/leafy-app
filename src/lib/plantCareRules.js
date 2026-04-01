@@ -173,10 +173,28 @@ function pickRule(normalized, environment) {
 }
 
 /**
+ * Prefer cup-style amounts only when pot context is meaningful (e.g. potted indoor or outdoor in a pot).
+ */
+export function shouldUsePotSizedAmount({
+  environment,
+  potSize,
+  sceneType,
+  matchKind,
+}) {
+  const st = sceneType || ''
+  if (matchKind === 'area') return false
+  if (st === 'garden_area' || st === 'multiple_plants') return false
+  if (environment === 'outdoor' && !potSize) return false
+  return true
+}
+
+/**
  * @param {{
  *   plantName: string,
  *   environment: 'indoor' | 'outdoor',
  *   potSize?: string | null,
+ *   sceneType?: string | null,
+ *   matchKind?: string | null,
  *   lastWateredAt?: Date | { toDate?: () => Date } | null,
  *   jitterKey?: string,
  *   jitterEventIndex?: number,
@@ -190,6 +208,8 @@ export function generateCareRecommendation(input) {
     lastWateredAt,
     jitterKey,
     jitterEventIndex = 0,
+    sceneType,
+    matchKind,
   } = input
 
   const normalized = normalizePlantName(plantName)
@@ -203,8 +223,18 @@ export function generateCareRecommendation(input) {
     if (environment === 'indoor') interval = Math.max(interval, 4)
   }
 
+  const usePotGuidance = shouldUsePotSizedAmount({
+    environment,
+    potSize: potSize || '',
+    sceneType,
+    matchKind,
+  })
   const potKey = potSize && POT_WATER[potSize] ? potSize : 'M'
-  const waterAmountText = POT_WATER[potKey]
+  const waterAmountText = usePotGuidance
+    ? POT_WATER[potKey]
+    : environment === 'outdoor'
+      ? 'Water deeply at the root zone or across the bed until soil is moist several inches down.'
+      : POT_WATER[potKey]
 
   const last = toDate(lastWateredAt)
   const anchor = last ?? new Date()
@@ -212,9 +242,13 @@ export function generateCareRecommendation(input) {
   const nextWateringAt = addCalendarDaysNY(anchor, interval + jitter)
 
   const careMatchQuality = matched ? 'specific' : 'general'
-  const scheduleNote = matched
+  let scheduleNote = matched
     ? 'Recommended schedule · tailored for this plant'
     : 'General recommendation · based on similar plants and your setup'
+  if (!usePotGuidance && environment === 'outdoor') {
+    scheduleNote =
+      'Outdoor or in-ground — adjust for heat, wind, and rainfall in your area.'
+  }
 
   const howPrefix = matched ? '' : 'Starting point — '
   const howToWaterText = matched
@@ -276,5 +310,8 @@ export function plantTypeDetectedLabel(plant) {
   const t = plant?.type?.trim()
   if (!t) return null
   const q = plant?.careMatchQuality ?? 'general'
+  if (q === 'area' || plant?.matchKind === 'area') {
+    return `${t} · area guide`
+  }
   return q === 'specific' ? `${t} · recognized` : `${t} · general guide`
 }

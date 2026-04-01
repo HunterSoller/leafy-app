@@ -26,6 +26,21 @@ function cardUrgencyClass(tier, daysUntil) {
   return 'ok'
 }
 
+function plantingSceneLabel(plant) {
+  if (plant.sceneType === 'garden_area') return 'Garden area'
+  if (plant.sceneType === 'multiple_plants') return 'Mixed planting'
+  return null
+}
+
+function plantProvenanceLine(plant) {
+  if (!plant.aiGenerated) return null
+  if (plant.aiCorrectedByUser) return 'Updated from photo'
+  if (plant.careMatchQuality === 'area' || plant.matchKind === 'area') {
+    return 'General care plan'
+  }
+  return 'Identified from photo'
+}
+
 function chipFromSmart(smart) {
   if (smart.tier === 'needs_water_today') {
     return 'Today'
@@ -60,6 +75,8 @@ export function PlantCard({
   const lastLine = formatTimeAgo(plant.lastWatered?.toDate?.() ?? plant.lastWatered)
   const intervalDays = getPlantIntervalDays(plant)
   const typeLabel = plantTypeDetectedLabel(plant)
+  const sceneLabel = plantingSceneLabel(plant)
+  const provenanceLine = plantProvenanceLine(plant)
   const waterCount = plant.totalWaterCount ?? 0
   const personaLine = softPersonaLine(smart.tier, smart.nextInDays, plant.id)
 
@@ -108,6 +125,9 @@ export function PlantCard({
           <h3 className="plant-name">{plant.name}</h3>
           <div className="plant-card-badges">
             <StatusBadge location={plant.location} />
+            {sceneLabel && (
+              <span className="plant-scene-chip">{sceneLabel}</span>
+            )}
             {chip && (
               <span className={`plant-urgency-chip chip-${urgency}`}>{chip}</span>
             )}
@@ -155,6 +175,9 @@ export function PlantCard({
       </div>
 
       {typeLabel && <p className="plant-type-subtle">{typeLabel}</p>}
+      {provenanceLine && (
+        <p className="plant-provenance">{provenanceLine}</p>
+      )}
 
       <div className="plant-card-status-block">
         <p className="plant-next-label">When to water</p>
