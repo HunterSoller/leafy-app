@@ -1765,11 +1765,35 @@ body {
   padding-bottom: 8px;
 }
 
+.add-confirm-card {
+  padding: 20px 18px 12px;
+  margin: 4px 0 8px;
+  background: linear-gradient(
+    165deg,
+    rgba(255, 255, 255, 0.94) 0%,
+    rgba(232, 240, 231, 0.28) 100%
+  );
+  border: 1px solid rgba(138, 175, 133, 0.35);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-soft);
+}
+
+.add-confirm-eyebrow {
+  margin: 0 0 8px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--moss);
+  opacity: 0.85;
+}
+
 .add-confirm-lead {
-  font-size: 17px;
+  font-size: 1.15rem;
   line-height: 1.45;
   color: var(--bark);
-  margin: 0 0 12px;
+  margin: 0 0 10px;
+  font-weight: 500;
 }
 
 .add-confirm-name {
@@ -1778,10 +1802,222 @@ body {
 }
 
 .add-confirm-hint {
-  margin: 0 0 22px;
-  font-size: 14px;
+  margin: 0 0 18px;
+  font-size: 13px;
   color: var(--bark-muted);
   line-height: 1.45;
+}
+
+.field--confirm-edit {
+  margin-bottom: 0;
+}
+
+/* Photo-first add plant stack */
+.drawer-scroll--add-plant {
+  padding-top: 6px;
+}
+
+.add-plant-stack {
+  display: flex;
+  flex-direction: column;
+}
+
+.add-plant-header {
+  margin-bottom: 12px;
+}
+
+.drawer-title--add {
+  margin: 0 0 6px;
+  letter-spacing: -0.03em;
+}
+
+.drawer-lede--add {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.4;
+  color: var(--bark-muted);
+  font-weight: 500;
+  max-width: 32em;
+}
+
+.add-plant-photo-block {
+  margin-bottom: 16px;
+}
+
+.add-plant-label-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.field-label-photo {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--bark);
+  letter-spacing: -0.02em;
+}
+
+.field-micro--below-label {
+  margin: 4px 0 10px;
+  font-size: 13px;
+}
+
+.upload-zone--hero {
+  min-height: 228px;
+  display: block;
+}
+
+.upload-zone--hero.upload-zone--filled {
+  cursor: default;
+  min-height: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+.upload-preview--hero {
+  width: 100%;
+  height: 220px;
+  object-fit: cover;
+  display: block;
+}
+
+.upload-preview-wrap {
+  position: relative;
+}
+
+.upload-preview-actions {
+  display: flex;
+  gap: 20px;
+  justify-content: center;
+  padding: 11px 14px 14px;
+  background: rgba(247, 243, 237, 0.97);
+  border-top: 1px solid var(--mist-soft);
+}
+
+.btn-photo-action {
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--moss);
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 8px;
+  transition: background 0.15s ease;
+}
+
+.btn-photo-action:active:not(:disabled) {
+  background: rgba(74, 103, 65, 0.1);
+}
+
+.btn-photo-action--muted {
+  color: var(--bark-muted);
+  font-weight: 500;
+}
+
+.upload-icon-circle {
+  width: 58px;
+  height: 58px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: rgba(74, 103, 65, 0.1);
+  color: var(--moss);
+}
+
+.add-plant-env {
+  margin-bottom: 14px;
+}
+
+.add-plant-loc {
+  margin-top: 10px;
+}
+
+.add-plant-name-block {
+  margin-bottom: 12px;
+}
+
+.add-plant-name-row {
+  margin-bottom: 4px;
+}
+
+.field-input--optional {
+  background: rgba(255, 255, 255, 0.72);
+  border-color: rgba(184, 201, 181, 0.4);
+}
+
+.add-plant-outdoor-mode {
+  margin-bottom: 12px;
+}
+
+.field--deemphasized {
+  opacity: 0.92;
+}
+
+.yorn-toggle {
+  display: flex;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.yorn-toggle button {
+  flex: 1;
+  min-height: 48px;
+  border-radius: 14px;
+  border: 1.5px solid var(--mist);
+  background: rgba(255, 255, 255, 0.75);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--bark-muted);
+  cursor: pointer;
+  transition:
+    background 0.18s ease,
+    border-color 0.18s ease,
+    color 0.18s ease;
+}
+
+.yorn-toggle button.is-on {
+  border-color: rgba(74, 103, 65, 0.55);
+  background: rgba(74, 103, 65, 0.1);
+  color: #3d5c36;
+}
+
+.field--pot-muted {
+  margin-top: 4px;
+  margin-bottom: 8px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(184, 201, 181, 0.35);
+}
+
+.field-label-faint {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: rgba(74, 55, 40, 0.48);
+  margin-bottom: 8px;
+  display: block;
+}
+
+.pot-size-selector--deemphasized {
+  opacity: 0.88;
+}
+
+.pot-size-selector--deemphasized .pot-pill {
+  min-height: 44px;
+  font-size: 13px;
+  padding: 0 10px;
+}
+
+.drawer-footer--add-plant {
+  padding-top: 12px;
+}
+
+.add-plant-prep-hint {
+  margin-top: 8px;
 }
 
 .care-plan-toast {

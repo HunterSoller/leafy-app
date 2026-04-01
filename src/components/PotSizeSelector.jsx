@@ -6,10 +6,14 @@ const SIZES = [
   { id: 'XL', label: 'Extra Large', emoji: '🪴' },
 ]
 
-export function PotSizeSelector({ value, onChange }) {
+export function PotSizeSelector({ value, onChange, className = '' }) {
   const v = value === undefined || value === null ? '' : value
   return (
-    <div className="pot-size-selector" role="group" aria-label="Pot size">
+    <div
+      className={['pot-size-selector', className].filter(Boolean).join(' ')}
+      role="group"
+      aria-label="Container size"
+    >
       {SIZES.map((s) => (
         <button
           key={s.id || 'unsure'}

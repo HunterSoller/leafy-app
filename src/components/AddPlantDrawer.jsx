@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { PotSizeSelector } from './PotSizeSelector'
 import { prepareImageForIdentify } from '../lib/imagePrep'
 import { identifyPlantRequest } from '../lib/identifyPlantClient'
@@ -22,6 +22,7 @@ export function AddPlantDrawer({
   onUpdate,
   onPhotoPlanReady,
 }) {
+  const fileInputRef = useRef(null)
   const [form, setForm] = useState(emptyForm)
   const [saveError, setSaveError] = useState(null)
   const [saving, setSaving] = useState(false)
@@ -32,7 +33,8 @@ export function AddPlantDrawer({
   const [confirmSubstep, setConfirmSubstep] = useState('pick')
   const [reviewName, setReviewName] = useState('')
   const [analyzeError, setAnalyzeError] = useState(false)
-  const [outdoorInContainer, setOutdoorInContainer] = useState(false)
+  /** Outdoor: growing in a pot vs in-ground / bed */
+  const [outdoorIsContainer, setOutdoorIsContainer] = useState(false)
 
   useEffect(() => {
     if (!open) return
@@ -54,12 +56,12 @@ export function AddPlantDrawer({
         potSize: ps,
         imageUrl: plantToEdit.imageUrl ?? null,
       })
-      setOutdoorInContainer(
+      setOutdoorIsContainer(
         plantToEdit.location === 'outdoor' && Boolean(ps),
       )
     } else {
       setForm(emptyForm())
-      setOutdoorInContainer(false)
+      setOutdoorIsContainer(false)
     }
   }, [open, plantToEdit])
 
@@ -76,6 +78,12 @@ export function AddPlantDrawer({
   const set = useCallback((patch) => {
     setForm((f) => ({ ...f, ...patch }))
   }, [])
+
+  const clearPhoto = useCallback(() => {
+    set({ imageUrl: null })
+    setAnalyzeError(false)
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }, [set])
 
   const onFile = useCallback(
     async (e) => {
@@ -106,6 +114,13 @@ export function AddPlantDrawer({
 
   const hasPhoto = Boolean(form.imageUrl)
   const manualFallback = analyzeError
+  const isCreate = !plantToEdit?.id
+  const nameRequiredForCreate = isCreate && !hasPhoto
+  const nameRequired = nameRequiredForCreate || Boolean(plantToEdit)
+
+  const showPotForOutdoor = form.location === 'outdoor' && outdoorIsContainer
+  const showPotSection =
+    form.location === 'indoor' || showPotForOutdoor
 
   const commitCreate = useCallback(
     async ({
@@ -136,7 +151,7 @@ export function AddPlantDrawer({
       const { aiFallback = false } = opts
       const trimmed = form.name.trim()
       if (!trimmed) {
-        setSaveError('Add a short name so we can plan watering.')
+        setSaveError('Add a name so Leafy can build the plan.')
         return
       }
       setSaving(true)
@@ -190,7 +205,7 @@ export function AddPlantDrawer({
     } catch (err) {
       const quiet =
         err?.name === 'AbortError'
-          ? 'That took a little long. You can try again or save with a name.'
+          ? 'That took a little long. Try again or save with a name.'
           : 'We couldn’t identify it from the photo. You can still save it manually.'
       setSaveError(quiet)
       setAnalyzeError(true)
@@ -328,49 +343,51 @@ export function AddPlantDrawer({
       ? 'Looking at your plant…'
       : 'Building the care plan…'
 
-  const showPotSection =
-    form.location === 'indoor' ||
-    (form.location === 'outdoor' && outdoorInContainer)
+  const primaryDisabled =
+    saving ||
+    (showAnalyzing && !plantToEdit) ||
+    imageBusy ||
+    (plantToEdit && !form.name.trim()) ||
+    (isCreate && !manualFallback && nameRequiredForCreate && !form.name.trim()) ||
+    (isCreate && manualFallback && !form.name.trim())
 
   return (
     <div className="drawer-backdrop" role="presentation" onClick={onClose}>
       <div
-        className={`drawer drawer--sheet ${showAnalyzing ? 'drawer--analyzing' : ''}`}
+        className={`drawer drawer--sheet drawer--add-plant ${showAnalyzing ? 'drawer--analyzing' : ''}`}
         role="dialog"
         aria-modal="true"
         aria-busy={showAnalyzing || saving}
-        aria-label={plantToEdit ? 'Edit plant' : 'Add a plant'}
+        aria-label={plantToEdit ? 'Edit plant' : 'New plant'}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="drawer-handle" aria-hidden />
-        <div className="drawer-scroll">
+        <div className="drawer-scroll drawer-scroll--add-plant">
           {showAnalyzing ? (
             <div className="ai-loading-premium">
               <div className="ai-loading-glow" aria-hidden />
               <h2 className="drawer-title drawer-title--center">{loadingCopy}</h2>
               <p className="drawer-lede drawer-lede--center muted">
-                A quick, quiet look at your photo — no need to change anything.
+                Just a moment.
               </p>
             </div>
           ) : showConfirm ? (
-            <div className="add-confirm-panel">
-              <h2 className="drawer-title">Almost there</h2>
+            <div className="add-confirm-card">
+              <p className="add-confirm-eyebrow">Quick check</p>
               <p className="add-confirm-lead">
-                We think this is{' '}
+                We think this is
                 <span className="add-confirm-name">
+                  {' '}
                   {aiNormalized?.displayName}
                 </span>
-                .
               </p>
               <p className="add-confirm-hint">{confirmExplanationLine(aiNormalized)}</p>
 
               {confirmSubstep === 'edit' ? (
-                <label className="field field--spaced">
-                  <span className="field-label field-label-subtle">
-                    Name on your list
-                  </span>
+                <label className="field field--confirm-edit">
+                  <span className="field-label field-label-subtle">Name</span>
                   <input
-                    className="field-input field-input-lg field-input--soft"
+                    className="field-input field-input--soft"
                     value={reviewName}
                     onChange={(e) => setReviewName(e.target.value)}
                     autoComplete="off"
@@ -381,53 +398,101 @@ export function AddPlantDrawer({
               {saveError && <p className="field-error">{saveError}</p>}
             </div>
           ) : (
-            <>
-              <h2 className="drawer-title">
-                {plantToEdit ? 'Edit plant' : 'New plant'}
-              </h2>
-              <p className="drawer-lede drawer-lede--tight">
-                Take a photo or add a name — Leafy will build the care plan.
-              </p>
+            <div className="add-plant-stack">
+              <header className="add-plant-header">
+                <h2 className="drawer-title drawer-title--add">
+                  {plantToEdit ? 'Edit plant' : 'New plant'}
+                </h2>
+                <p className="drawer-lede drawer-lede--add">
+                  Take a photo or add a name — Leafy will build the care plan.
+                </p>
+              </header>
 
-              <div className="field field--hero-upload">
-                <label className="upload-zone upload-zone--premium">
-                  <input
-                    type="file"
-                    accept="image/*"
-                    capture="environment"
-                    className="sr-only"
-                    onChange={onFile}
-                    disabled={imageBusy || saving}
-                  />
-                  {form.imageUrl ? (
-                    <img src={form.imageUrl} alt="" className="upload-preview" />
-                  ) : (
-                    <div className="upload-placeholder upload-placeholder--premium">
-                      <span className="upload-cam-premium" aria-hidden>
-                        +
-                      </span>
-                      <span className="upload-primary-line">Add a photo</span>
-                      <span className="upload-secondary-line">
-                        Tap to take or choose — best in natural light
-                      </span>
+              {/* A — Photo first */}
+              <section className="add-plant-photo-block" aria-label="Photo">
+                <div className="add-plant-label-row">
+                  <span className="field-label field-label-photo">Photo</span>
+                </div>
+                <p className="field-micro field-micro--below-label">
+                  Let Leafy identify it from the photo
+                </p>
+                <input
+                  ref={fileInputRef}
+                  id="add-plant-photo-input"
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  className="sr-only"
+                  onChange={onFile}
+                  disabled={imageBusy || saving}
+                />
+                {form.imageUrl ? (
+                  <div className="upload-zone upload-zone--premium upload-zone--hero upload-zone--filled">
+                    <div className="upload-preview-wrap">
+                      <img src={form.imageUrl} alt="" className="upload-preview upload-preview--hero" />
+                      <div className="upload-preview-actions">
+                        <button
+                          type="button"
+                          className="btn-photo-action"
+                          onClick={() => fileInputRef.current?.click()}
+                          disabled={imageBusy || saving}
+                        >
+                          Change
+                        </button>
+                        <button
+                          type="button"
+                          className="btn-photo-action btn-photo-action--muted"
+                          onClick={clearPhoto}
+                          disabled={saving}
+                        >
+                          Remove
+                        </button>
+                      </div>
                     </div>
-                  )}
-                </label>
+                  </div>
+                ) : (
+                  <label
+                    htmlFor="add-plant-photo-input"
+                    className="upload-zone upload-zone--premium upload-zone--hero"
+                  >
+                    <div className="upload-placeholder upload-placeholder--premium">
+                      <span className="upload-icon-circle" aria-hidden>
+                        <svg
+                          width="28"
+                          height="28"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1.75"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
+                          <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+                          <circle cx="12" cy="13" r="4" />
+                        </svg>
+                      </span>
+                      <span className="upload-primary-line">Tap to add a photo</span>
+                      <span className="upload-secondary-line">Best for plant ID</span>
+                    </div>
+                  </label>
+                )}
                 {imageBusy && (
-                  <p className="field-micro field-micro--center">
-                    Preparing image…
+                  <p className="field-micro field-micro--center add-plant-prep-hint">
+                    Preparing…
                   </p>
                 )}
-              </div>
+              </section>
 
-              <div className="field field--spaced">
-                <div className="loc-toggle loc-toggle--polished">
+              {/* B — Environment */}
+              <section className="add-plant-env" aria-label="Where is it">
+                <span className="field-label field-label-photo">Where is it?</span>
+                <div className="loc-toggle loc-toggle--polished add-plant-loc">
                   <button
                     type="button"
                     className={form.location === 'indoor' ? 'is-on' : ''}
                     onClick={() => {
                       set({ location: 'indoor' })
-                      setOutdoorInContainer(false)
+                      setOutdoorIsContainer(false)
                     }}
                     disabled={saving}
                   >
@@ -438,64 +503,95 @@ export function AddPlantDrawer({
                     className={form.location === 'outdoor' ? 'is-on' : ''}
                     onClick={() => {
                       set({ location: 'outdoor' })
-                      if (!outdoorInContainer) set({ potSize: '' })
+                      if (!outdoorIsContainer) set({ potSize: '' })
                     }}
                     disabled={saving}
                   >
                     Outdoor
                   </button>
                 </div>
-              </div>
+              </section>
 
-              <label className="field field--secondary-name">
-                <span className="field-label field-label-subtle">
-                  Plant name (optional)
-                </span>
-                <span className="field-micro">
-                  If you know it, add it. Otherwise Leafy will identify it.
-                </span>
-                <input
-                  className="field-input field-input--soft"
-                  value={form.name}
-                  onChange={(e) => set({ name: e.target.value })}
-                  placeholder=" "
-                  autoComplete="off"
-                  disabled={saving}
-                />
-              </label>
+              {/* Primary action hint: env + photo answer "what to do"; name + pot are secondary */}
+              <section className="add-plant-name-block">
+                <label className="field field--name-dynamic">
+                  <span className="field-label-row add-plant-name-row">
+                    <span className="field-label field-label-subtle">
+                      {plantToEdit
+                        ? 'Name'
+                        : hasPhoto
+                          ? 'Name (optional)'
+                          : 'Name'}
+                    </span>
+                    {nameRequired ? (
+                      <span className="field-pill field-pill-req">Required</span>
+                    ) : null}
+                  </span>
+                  <span className="field-micro">
+                    {plantToEdit
+                      ? 'How it appears on your list.'
+                      : hasPhoto
+                        ? 'If you know it, add it. Otherwise Leafy will identify it.'
+                        : 'Add a simple name so Leafy can build the care plan.'}
+                  </span>
+                  <input
+                    className={`field-input field-input--soft ${!nameRequired ? 'field-input--optional' : ''}`}
+                    value={form.name}
+                    onChange={(e) => set({ name: e.target.value })}
+                    placeholder={nameRequiredForCreate ? 'e.g. Snake plant' : ''}
+                    autoComplete="off"
+                    disabled={saving}
+                    aria-required={nameRequired}
+                  />
+                </label>
+              </section>
 
-              {form.location === 'outdoor' && !outdoorInContainer ? (
-                <button
-                  type="button"
-                  className="btn-disclosure"
-                  onClick={() => setOutdoorInContainer(true)}
-                  disabled={saving}
-                >
-                  Growing in a container?
-                </button>
+              {form.location === 'outdoor' ? (
+                <section className="add-plant-outdoor-mode field--deemphasized">
+                  <span className="field-label field-label-subtle">
+                    Growing in a container?
+                  </span>
+                  <div className="yorn-toggle">
+                    <button
+                      type="button"
+                      className={outdoorIsContainer ? 'is-on' : ''}
+                      onClick={() => setOutdoorIsContainer(true)}
+                      disabled={saving}
+                    >
+                      Yes
+                    </button>
+                    <button
+                      type="button"
+                      className={!outdoorIsContainer ? 'is-on' : ''}
+                      onClick={() => {
+                        setOutdoorIsContainer(false)
+                        set({ potSize: '' })
+                      }}
+                      disabled={saving}
+                    >
+                      No · in ground
+                    </button>
+                  </div>
+                </section>
               ) : null}
 
+              {/* Pot — last, muted */}
               {showPotSection ? (
-                <div className="field field--spaced field--last">
-                  <span className="field-label field-label-subtle">
-                    Pot size <span className="field-optional">(optional)</span>
+                <section className="field field--pot-muted field--last" aria-label="Container size">
+                  <span className="field-label field-label-faint">
+                    Container size <span className="field-optional">(optional)</span>
                   </span>
-                  <p className="field-hint">
-                    For potted plants — skip for in-ground beds and open soil.
-                  </p>
                   <PotSizeSelector
+                    className="pot-size-selector--deemphasized"
                     value={form.potSize}
                     onChange={(ps) => set({ potSize: ps })}
                   />
-                </div>
+                </section>
               ) : null}
 
               {analyzeError && (
                 <div className="ai-soft-error" role="status">
-                  <p>
-                    We couldn’t identify it from the photo. You can still save
-                    it manually.
-                  </p>
+                  <p>{saveError}</p>
                   <button
                     type="button"
                     className="btn-text-link"
@@ -512,11 +608,11 @@ export function AddPlantDrawer({
               {saveError && !analyzeError && (
                 <p className="field-error">{saveError}</p>
               )}
-            </>
+            </div>
           )}
         </div>
 
-        <div className="drawer-footer drawer-footer--sticky">
+        <div className="drawer-footer drawer-footer--sticky drawer-footer--add-plant">
           {showConfirm ? (
             confirmSubstep === 'pick' ? (
               <>
@@ -530,7 +626,7 @@ export function AddPlantDrawer({
                 </button>
                 <button
                   type="button"
-                  className="btn-primary btn-primary--large"
+                  className="btn-primary btn-primary--large btn-primary--premium"
                   onClick={handleUseThis}
                   disabled={saving}
                 >
@@ -553,7 +649,7 @@ export function AddPlantDrawer({
                 </button>
                 <button
                   type="button"
-                  className="btn-primary btn-primary--large"
+                  className="btn-primary btn-primary--large btn-primary--premium"
                   onClick={handleSaveEditedName}
                   disabled={saving || !reviewName.trim()}
                 >
@@ -575,17 +671,7 @@ export function AddPlantDrawer({
                 type="button"
                 className="btn-primary btn-primary--large btn-primary--premium"
                 onClick={handlePrimary}
-                disabled={
-                  saving ||
-                  (showAnalyzing && !plantToEdit) ||
-                  imageBusy ||
-                  (plantToEdit && !form.name.trim()) ||
-                  (!plantToEdit &&
-                    !manualFallback &&
-                    !hasPhoto &&
-                    !form.name.trim()) ||
-                  (!plantToEdit && manualFallback && !form.name.trim())
-                }
+                disabled={primaryDisabled}
               >
                 {plantToEdit ? (saving ? 'Saving…' : 'Save changes') : createPrimaryLabel}
               </button>
