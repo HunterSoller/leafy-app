@@ -1,0 +1,17 @@
+{
+  "name": "Leafy",
+  "short_name": "Leafy",
+  "description": "Plant watering tracker",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#F7F3ED",
+  "theme_color": "#4A6741",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
