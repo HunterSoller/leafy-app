@@ -18,10 +18,10 @@ export function CareInfoPanel({
       >
         <span className="care-info-toggle-text">
           <span className="care-info-toggle-main">
-            {expanded ? 'Hide details' : 'View care'}
+            {expanded ? 'Hide care details' : 'How to care'}
           </span>
           <span className="care-info-toggle-hint">
-            Setup, weather context, how to water
+            Amount, method, weather notes
           </span>
         </span>
         <span className={`chevron ${expanded ? 'is-up' : ''}`} aria-hidden>

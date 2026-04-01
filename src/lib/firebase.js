@@ -19,6 +19,13 @@ import {
   readLocalGroupSettings,
   writeLocalGroupSettings,
 } from './groupLocalSettings'
+
+function docHasSavedLocation(data) {
+  if (!data) return false
+  const la = Number(data.location_lat)
+  const ln = Number(data.location_lng)
+  return !Number.isNaN(la) && !Number.isNaN(ln)
+}
 import { getPlantIntervalDays, computeJitterDays } from './plantCareRules'
 
 function getConfig() {
@@ -158,10 +165,16 @@ export function subscribeGroupSettings(groupId, onData, onError) {
     ref,
     (snap) => {
       if (!snap.exists()) {
-        onData(null)
+        onData(readLocalGroupSettings(id) ?? null)
         return
       }
-      onData(snap.data())
+      const data = snap.data()
+      if (docHasSavedLocation(data)) {
+        onData(data)
+        return
+      }
+      const local = readLocalGroupSettings(id)
+      onData(docHasSavedLocation(local) ? local : null)
     },
     (err) => {
       onError?.(err)
@@ -195,6 +208,7 @@ export async function saveGroupLocation(groupId, fields) {
   }
 
   await setDoc(doc(db, 'groups', id), payload, { merge: true })
+  writeLocalGroupSettings(id, payload)
 }
 
 export async function persistPlantWaterBalance(id, patch) {

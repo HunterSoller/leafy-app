@@ -1,5 +1,8 @@
 import { useCallback, useState } from 'react'
-import { geocodeOpenMeteoSearch } from '../lib/geocodeOpenMeteo'
+import {
+  geocodeOpenMeteoSearch,
+  reverseGeocodeLabel,
+} from '../lib/geocodeOpenMeteo'
 
 /**
  * Shared browser geolocation + manual geocode flow for group location.
@@ -26,7 +29,11 @@ export function useGroupLocationSetup(saveLocation, { afterSave } = {}) {
 
   const saveCoords = useCallback(
     async (payload) => {
-      await saveLocation(payload)
+      try {
+        await saveLocation(payload)
+      } catch {
+        return
+      }
       reset()
       await afterSave?.()
     },
@@ -44,10 +51,21 @@ export function useGroupLocationSetup(saveLocation, { afterSave } = {}) {
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
         try {
+          let label = null
+          try {
+            label = await reverseGeocodeLabel(
+              pos.coords.latitude,
+              pos.coords.longitude,
+            )
+          } catch {
+            /* use fallback below */
+          }
           await saveCoords({
             location_lat: pos.coords.latitude,
             location_lng: pos.coords.longitude,
-            location_label: 'Current location',
+            location_label:
+              label ||
+              `${Number(pos.coords.latitude).toFixed(2)}°, ${Number(pos.coords.longitude).toFixed(2)}°`,
             location_source: 'browser',
           })
         } finally {

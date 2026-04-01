@@ -1,38 +1,32 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 
 export function WateringButton({ onWater, disabled, overdue }) {
-  const [phase, setPhase] = useState('idle')
-  const [ripple, setRipple] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const busyRef = useRef(false)
 
   const handleClick = useCallback(async () => {
-    if (disabled || phase !== 'idle') return
-    setRipple(true)
-    window.setTimeout(() => setRipple(false), 600)
-    setPhase('logging')
+    if (disabled || busyRef.current) return
+    busyRef.current = true
+    setSaving(true)
     try {
       await onWater()
     } finally {
-      setPhase('done')
-      window.setTimeout(() => setPhase('idle'), 1600)
+      busyRef.current = false
+      setSaving(false)
     }
-  }, [disabled, onWater, phase])
-
-  const label =
-    phase === 'done'
-      ? 'Marked as watered'
-      : phase === 'logging'
-        ? 'Saving…'
-        : 'Watered it'
+  }, [disabled, onWater])
 
   return (
     <button
       type="button"
-      className={`watering-btn ${overdue ? 'is-overdue' : ''} ${ripple ? 'has-ripple' : ''} ${phase === 'done' ? 'is-success' : ''}`}
-      onClick={handleClick}
-      disabled={disabled || phase === 'logging'}
-      style={{ touchAction: 'manipulation' }}
+      className={`watering-btn ${overdue ? 'is-overdue' : ''} ${saving ? 'is-saving' : ''}`}
+      onClick={() => void handleClick()}
+      disabled={disabled || saving}
+      aria-busy={saving}
     >
-      {label}
+      <span className="watering-btn-label">
+        {saving ? 'Saving…' : 'Watered it'}
+      </span>
     </button>
   )
 }

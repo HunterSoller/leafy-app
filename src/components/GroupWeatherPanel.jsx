@@ -1,5 +1,14 @@
+function formatForecastUpdated(ms) {
+  if (ms == null || Number.isNaN(ms)) return null
+  const sec = Math.floor((Date.now() - ms) / 1000)
+  if (sec < 45) return 'Updated just now'
+  if (sec < 3600) return `Updated ${Math.max(1, Math.floor(sec / 60))} min ago`
+  if (sec < 86400) return `Updated ${Math.floor(sec / 3600)} hr ago`
+  return `Updated ${Math.floor(sec / 86400)} day${sec >= 172800 ? 's' : ''} ago`
+}
+
 /**
- * Read-only presentation for saved forecast location & whether Leafy is using weather.
+ * Forecast location + whether Leafy is using weather (outdoor plants only).
  */
 export function GroupWeatherPanel({
   isDefaultGroup,
@@ -7,17 +16,19 @@ export function GroupWeatherPanel({
   locationLabel,
   forecastActive,
   weatherFetchError,
+  weatherFetchedAt,
   onUpdateLocation,
 }) {
   const loc = (locationLabel || '').trim() || 'Saved spot'
+  const updatedLine = formatForecastUpdated(weatherFetchedAt)
 
   let badgeLabel = 'Not set'
   let badgeClass = 'group-weather-badge--off'
   if (hasSavedLocation && forecastActive) {
-    badgeLabel = 'Live forecast'
+    badgeLabel = 'Forecast on'
     badgeClass = 'group-weather-badge--on'
   } else if (hasSavedLocation && weatherFetchError) {
-    badgeLabel = 'Forecast unavailable'
+    badgeLabel = 'Forecast paused'
     badgeClass = 'group-weather-badge--warn'
   } else if (hasSavedLocation) {
     badgeLabel = 'Schedule only'
@@ -27,36 +38,49 @@ export function GroupWeatherPanel({
   return (
     <div className="group-weather-panel">
       <div className="group-weather-panel-row">
-        <span className="group-weather-panel-label">Weather for this space</span>
+        <span className="group-weather-panel-label">Weather (outdoor plants)</span>
         <span className={`group-weather-badge ${badgeClass}`}>{badgeLabel}</span>
       </div>
 
       {hasSavedLocation ? (
-        <p className="group-weather-panel-loc">
-          <span className="group-weather-loc-name">{loc}</span>
-          {weatherFetchError ? (
-            <span className="group-weather-panel-fallback">
-              {' '}
-              We couldn’t refresh the sky right now — your plants still follow the
-              rhythm you set.
-            </span>
+        <div className="group-weather-panel-loc-block">
+          <p className="group-weather-panel-loc group-weather-panel-loc--with-action">
+            <span className="group-weather-loc-name">{loc}</span>
+            {weatherFetchError ? (
+              <span className="group-weather-panel-fallback">
+                {' '}
+                We couldn’t load a fresh forecast — your watering schedule is
+                unchanged.
+              </span>
+            ) : null}
+          </p>
+          {updatedLine && !weatherFetchError ? (
+            <p className="group-weather-updated">{updatedLine}</p>
           ) : null}
-        </p>
+          <button
+            type="button"
+            className="btn-weather-change-loc"
+            onClick={onUpdateLocation}
+          >
+            Change location
+          </button>
+        </div>
       ) : (
-        <p className="group-weather-panel-loc group-weather-panel-loc--muted">
-          {isDefaultGroup
-            ? 'Optional: pick a place on the map so outdoor plants can lean on local rain and heat.'
-            : 'One quick setup ties this NFC space to real-world weather for outdoor plants.'}
-        </p>
+        <>
+          <p className="group-weather-panel-loc group-weather-panel-loc--muted">
+            {isDefaultGroup
+              ? 'Optional: set a spot so outdoor plants can lean on local rain and heat.'
+              : 'Saving a place here helps outdoor plants — indoors stay on your rhythm.'}
+          </p>
+          <button
+            type="button"
+            className="btn-weather-update"
+            onClick={onUpdateLocation}
+          >
+            Set location
+          </button>
+        </>
       )}
-
-      <button
-        type="button"
-        className="btn-weather-update"
-        onClick={onUpdateLocation}
-      >
-        {hasSavedLocation ? 'Update location' : 'Set location'}
-      </button>
     </div>
   )
 }

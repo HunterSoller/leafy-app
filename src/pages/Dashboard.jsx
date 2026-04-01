@@ -1,13 +1,16 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  startTransition,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import { usePlants } from '../hooks/usePlants'
 import { useWeather } from '../hooks/useWeather'
 import { useGroupId } from '../hooks/useGroupId'
 import { useGroupSettings } from '../hooks/useGroupSettings'
 import { getGroupSpaceLabel, DEFAULT_GROUP_ID } from '../lib/group'
-import {
-  isGroupLocationPromptSkipped,
-  setGroupLocationPromptSkipped,
-} from '../lib/groupLocalSettings'
 import { persistPlantWaterBalance, timestampFromDate } from '../lib/firebase'
 import {
   computeSyncedHydration,
@@ -28,6 +31,7 @@ import { GroupLocationModal } from '../components/GroupLocationModal'
 import { GroupWelcomeScreen } from '../components/GroupWelcomeScreen'
 import { GroupWeatherPanel } from '../components/GroupWeatherPanel'
 import { RecentActivitySection } from '../components/RecentActivitySection'
+import { WateringCelebration } from '../components/WateringCelebration'
 
 function PlantSection({ title, count, children, sectionRef, className = '' }) {
   return (
@@ -45,6 +49,39 @@ function PlantSection({ title, count, children, sectionRef, className = '' }) {
       </h2>
       {children}
     </section>
+  )
+}
+
+function GroupLocationBootstrap() {
+  return (
+    <div
+      className="group-welcome group-welcome--bootstrap group-welcome--intro"
+      aria-busy="true"
+    >
+      <div className="group-welcome-bg" aria-hidden>
+        <div className="group-welcome-bg-blob group-welcome-bg-blob--1" />
+        <div className="group-welcome-bg-blob group-welcome-bg-blob--2" />
+        <div className="group-welcome-bg-grain" />
+      </div>
+      <div className="group-welcome-inner">
+        <header className="group-welcome-header group-welcome-header--intro">
+          <div className="group-welcome-brand">
+            <span className="group-welcome-brand-leaf" aria-hidden>
+              🌿
+            </span>
+            <span className="group-welcome-brand-name">Leafy</span>
+          </div>
+        </header>
+        <div className="group-welcome-loading" role="status">
+          <div className="loading-dots" aria-hidden>
+            <span />
+            <span />
+            <span />
+          </div>
+          <p className="group-welcome-loading-text">Opening your space…</p>
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -85,6 +122,8 @@ export function Dashboard() {
   const {
     plants,
     loading,
+    error: plantsError,
+    clearError: clearPlantsError,
     configured,
     addPlant,
     updatePlant,
@@ -96,7 +135,7 @@ export function Dashboard() {
     settings: groupSettings,
     loading: groupSettingsLoading,
     hasSavedLocation,
-    saveLocation: saveGroupLocationFields,
+    saveLocation: persistGroupLocation,
   } = useGroupSettings()
 
   const isDefaultGroup = groupId === DEFAULT_GROUP_ID
@@ -107,6 +146,7 @@ export function Dashboard() {
     weatherOptionsForPlant: baseWeatherOptions,
     weatherContext,
     error: weatherFetchError,
+    weatherFetchedAt,
   } = useWeather(groupId, groupSettings, groupSettingsLoading)
 
   const [drawerOpen, setDrawerOpen] = useState(false)
@@ -120,6 +160,8 @@ export function Dashboard() {
   const [groupLocModalOpen, setGroupLocModalOpen] = useState(false)
   const [welcomePhase, setWelcomePhase] = useState(null)
   const [dashboardReveal, setDashboardReveal] = useState(false)
+  const [wateringCelebration, setWateringCelebration] = useState(null)
+  const [waterSaveError, setWaterSaveError] = useState(null)
 
   const urgentSectionRef = useRef(null)
   const didAutoScrollRef = useRef(false)
@@ -214,39 +256,42 @@ export function Dashboard() {
   }, [groupId])
 
   useEffect(() => {
-    setWelcomePhase(null)
-    setDashboardReveal(false)
+    startTransition(() => {
+      setWelcomePhase(null)
+      setDashboardReveal(false)
+    })
   }, [groupId])
 
-  const locPromptSkipped = isGroupLocationPromptSkipped(groupId)
-  const welcomeActive =
+  const saveLocationFromWelcome = useCallback(
+    async (fields) => {
+      setWelcomePhase('saving')
+      try {
+        await persistGroupLocation(fields)
+      } catch {
+        setWelcomePhase(null)
+        return
+      }
+      setWelcomePhase('success')
+      await new Promise((r) => setTimeout(r, 1150))
+      setWelcomePhase('exit')
+      await new Promise((r) => setTimeout(r, 520))
+      setWelcomePhase(null)
+      requestAnimationFrame(() => {
+        setDashboardReveal(true)
+        window.setTimeout(() => setDashboardReveal(false), 720)
+      })
+    },
+    [persistGroupLocation],
+  )
+
+  const showLocationBootstrap = !isDefaultGroup && groupSettingsLoading
+  const showWelcome =
     !isDefaultGroup &&
-    !locPromptSkipped &&
-    (groupSettingsLoading ||
-      !hasSavedLocation ||
+    !groupSettingsLoading &&
+    (!hasSavedLocation ||
+      welcomePhase === 'saving' ||
       welcomePhase === 'success' ||
       welcomePhase === 'exit')
-
-  const runWelcomeSavedSequence = useCallback(async () => {
-    setWelcomePhase('success')
-    await new Promise((r) => setTimeout(r, 1150))
-    setWelcomePhase('exit')
-    await new Promise((r) => setTimeout(r, 520))
-    setWelcomePhase(null)
-    requestAnimationFrame(() => {
-      setDashboardReveal(true)
-      window.setTimeout(() => setDashboardReveal(false), 720)
-    })
-  }, [])
-
-  const handleWelcomeSkip = useCallback(() => {
-    setGroupLocationPromptSkipped(groupId, true)
-    setWelcomePhase(null)
-    requestAnimationFrame(() => {
-      setDashboardReveal(true)
-      window.setTimeout(() => setDashboardReveal(false), 720)
-    })
-  }, [groupId])
 
   useEffect(() => {
     if (loading || didAutoScrollRef.current || grouped.today.length === 0) {
@@ -292,15 +337,29 @@ export function Dashboard() {
 
   const handleWaterPlant = useCallback(
     async (plant) => {
-      setFlashPlantId(plant.id)
-      window.setTimeout(() => setFlashPlantId(null), 480)
-      await waterPlant(plant, {
-        outdoorDelayDays: delayForPlant(plant),
-        rainMmSnapshot: weatherContext.mmCombined48h,
-      })
+      setWaterSaveError(null)
+      try {
+        await waterPlant(plant, {
+          outdoorDelayDays: delayForPlant(plant),
+          rainMmSnapshot: weatherContext.mmCombined48h,
+        })
+        setFlashPlantId(plant.id)
+        window.setTimeout(() => setFlashPlantId(null), 640)
+        setWateringCelebration({
+          name: String(plant.displayName || plant.name || 'Plant').trim(),
+        })
+      } catch {
+        setWaterSaveError(
+          'We couldn’t save that watering. Check your connection and try again.',
+        )
+      }
     },
     [waterPlant, delayForPlant, weatherContext.mmCombined48h],
   )
+
+  const dismissWateringCelebration = useCallback(() => {
+    setWateringCelebration(null)
+  }, [])
 
   const openAdd = useCallback(() => {
     setPlantToEdit(null)
@@ -329,10 +388,13 @@ export function Dashboard() {
     setCarePlanToast(
       name
         ? {
-            headline: `Care plan ready for ${name}`,
-            subline: 'Added to this space',
+            headline: `${name} is on your list`,
+            subline: 'Care rhythm saved for this space',
           }
-        : { headline: 'Care plan ready', subline: 'Added to this space' },
+        : {
+            headline: 'Plant added',
+            subline: 'Care rhythm saved for this space',
+          },
     )
   }, [])
 
@@ -362,9 +424,17 @@ export function Dashboard() {
 
   return (
     <div className="app-shell">
+      {showLocationBootstrap ? (
+        <GroupLocationBootstrap />
+      ) : showWelcome ? (
+        <GroupWelcomeScreen
+          groupLabel={groupLabel}
+          saveLocation={saveLocationFromWelcome}
+          phase={welcomePhase}
+        />
+      ) : (
       <div
-        className={`dashboard-layer ${welcomeActive ? 'dashboard-layer--obscured' : ''} ${dashboardReveal && !welcomeActive ? 'dashboard-layer--reveal' : ''}`}
-        aria-hidden={welcomeActive ? true : undefined}
+        className={`dashboard-layer ${dashboardReveal ? 'dashboard-layer--reveal' : ''}`}
       >
       <header className="app-header">
         <div className="app-header-main">
@@ -376,7 +446,9 @@ export function Dashboard() {
                 </span>
                 <span className="brand-name">Leafy</span>
               </div>
-              <p className="brand-tagline">Calm care for your plants</p>
+              <p className="brand-tagline brand-tagline--optional">
+              Calm care for your plants
+            </p>
             </div>
             <button
               type="button"
@@ -387,7 +459,7 @@ export function Dashboard() {
               Add plant
             </button>
           </div>
-          <p className="group-eyebrow">This space</p>
+          <p className="group-eyebrow">You’re in</p>
           <h1 className="group-title">{spaceLabel}</h1>
           <GroupWeatherPanel
             isDefaultGroup={isDefaultGroup}
@@ -395,6 +467,7 @@ export function Dashboard() {
             locationLabel={groupSettings?.location_label}
             forecastActive={forecastActive}
             weatherFetchError={Boolean(weatherFetchError)}
+            weatherFetchedAt={weatherFetchedAt}
             onUpdateLocation={() => setGroupLocModalOpen(true)}
           />
         </div>
@@ -407,20 +480,49 @@ export function Dashboard() {
         />
       )}
 
+      {plantsError ? (
+        <div className="calm-app-notice calm-app-notice--warn" role="status">
+          <p className="calm-app-notice-text">
+            We couldn’t refresh your plant list. If this keeps happening, close the
+            tab and open your link again.
+          </p>
+          <button
+            type="button"
+            className="calm-app-notice-dismiss"
+            onClick={() => clearPlantsError()}
+          >
+            Dismiss
+          </button>
+        </div>
+      ) : null}
+
+      {waterSaveError ? (
+        <div className="calm-app-notice calm-app-notice--warn" role="alert">
+          <p className="calm-app-notice-text">{waterSaveError}</p>
+          <button
+            type="button"
+            className="calm-app-notice-dismiss"
+            onClick={() => setWaterSaveError(null)}
+          >
+            OK
+          </button>
+        </div>
+      ) : null}
+
       {weatherFetchError && hasSavedLocation && (
         <p className="weather-fetch-hint" role="status">
           <span className="weather-fetch-hint-icon" aria-hidden>
             ☁️
           </span>
-          Forecast couldn’t load — your watering rhythm is unchanged.
+          Forecast isn’t available right now — your schedules stay as they are.
         </p>
       )}
 
       {firstPlantTip && (
         <div className="first-plant-banner" role="status">
           <p className="first-plant-banner-text">
-            <strong>Care plan ready.</strong> We’ll point you here when it’s
-            time to water — just tap &quot;Watered it&quot; when you do.
+            <strong>You’re all set.</strong> When you water, tap{' '}
+            <strong>Watered it</strong> on the card — Leafy remembers for you.
           </p>
           <button
             type="button"
@@ -435,7 +537,7 @@ export function Dashboard() {
 
       {allSetToday && (
         <div className="all-set-toast" role="status">
-          All set for today — nothing else needs water right now.
+          Nothing else needs water right now — enjoy the calm.
         </div>
       )}
 
@@ -456,7 +558,7 @@ export function Dashboard() {
               <span />
               <span />
             </div>
-            <p className="loading-text">Gathering your plants…</p>
+            <p className="loading-text">Loading your plants…</p>
             <div className="dashboard-skeleton" aria-hidden>
               <div className="skeleton-line skeleton-line--wide" />
               <div className="skeleton-line skeleton-line--card" />
@@ -471,20 +573,22 @@ export function Dashboard() {
 
         {!loading && plants.length > 0 && (
           <>
+            <p className="dashboard-focus-hint" role="note">
+              {grouped.today.length > 0
+                ? 'Start here, then tap Watered it when you’re done watering each one.'
+                : 'Everything looks comfortable — peek at Coming up if you want a heads-up.'}
+            </p>
+
             <GroupDashboardSummary
               plants={plants}
               delayForPlant={delayForPlant}
               weatherOptionsForPlant={weatherOptionsForPlant}
-              locationLabel={groupSettings?.location_label}
-              hasSavedLocation={hasSavedLocation}
-              forecastActive={forecastActive}
-              weatherFetchError={Boolean(weatherFetchError)}
             />
 
             <div className="plant-sections">
               {grouped.today.length > 0 && (
                 <PlantSection
-                  title="Needs water now"
+                  title="Water these first"
                   count={grouped.today.length}
                   sectionRef={urgentSectionRef}
                   className="plant-section--urgent"
@@ -508,13 +612,13 @@ export function Dashboard() {
                   role="status"
                 >
                   {grouped.soon.length > 0
-                    ? 'Nothing needs water right now — check “Due soon” next.'
+                    ? 'Nothing needs water right this minute — see Coming up below.'
                     : 'Nothing urgent — every plant looks comfortable for now.'}
                 </div>
               )}
 
               {grouped.soon.length > 0 && (
-                <PlantSection title="Due soon" count={grouped.soon.length}>
+                <PlantSection title="Coming up" count={grouped.soon.length}>
                   {renderPlantList(
                     grouped.soon,
                     idxSoon,
@@ -529,7 +633,7 @@ export function Dashboard() {
               )}
 
               {grouped.good.length > 0 && (
-                <PlantSection title="Okay for now" count={grouped.good.length}>
+                <PlantSection title="All good" count={grouped.good.length}>
                   {renderPlantList(
                     grouped.good,
                     idxGood,
@@ -576,21 +680,17 @@ export function Dashboard() {
         onClose={() => setGroupLocModalOpen(false)}
         groupLabel={groupLabel}
         isDefaultGroup={isDefaultGroup}
-        saveLocation={saveGroupLocationFields}
-        onSkipNotNow={() => setGroupLocationPromptSkipped(groupId, true)}
+        saveLocation={persistGroupLocation}
       />
-      </div>
 
-      {welcomeActive ? (
-        <GroupWelcomeScreen
-          groupLabel={groupLabel}
-          saveLocation={saveGroupLocationFields}
-          onSkip={handleWelcomeSkip}
-          onSavedSequence={runWelcomeSavedSequence}
-          phase={welcomePhase ?? 'idle'}
-          settingsLoading={groupSettingsLoading}
+      {wateringCelebration ? (
+        <WateringCelebration
+          plantName={wateringCelebration.name}
+          onDismiss={dismissWateringCelebration}
         />
       ) : null}
+      </div>
+      )}
     </div>
   )
 }

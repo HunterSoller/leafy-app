@@ -2,10 +2,10 @@ import { effectiveDueDate, calendarDaysDifferenceNY } from './wateringLogic'
 
 /** Minimal badge text for visual hierarchy (Now / Soon / Okay). */
 export function getTierBadgeShort(smart) {
-  if (!smart) return 'Okay'
-  if (smart.tier === 'needs_water_today') return 'Now'
+  if (!smart) return 'Good'
+  if (smart.tier === 'needs_water_today') return 'Due'
   if (smart.tier === 'due_soon') return 'Soon'
-  return 'Okay'
+  return 'Good'
 }
 
 /**
@@ -13,32 +13,34 @@ export function getTierBadgeShort(smart) {
  * Uses existing smart status tiers — does not recompute watering logic.
  */
 export function getScanFriendlyStatus(smart) {
-  if (!smart) return 'Okay for now'
+  if (!smart) return 'All good for now'
   const d = smart.daysUntil
 
   if (smart.tier === 'needs_water_today') {
     if (d != null && d < 0) {
       const o = -d
-      return o === 1 ? 'Water today · 1 day behind' : `Water today · ${o} days behind`
+      return o === 1
+        ? 'Needs water · about a day overdue'
+        : `Needs water · about ${o} days overdue`
     }
-    return 'Water today'
+    return 'Needs water today'
   }
 
   if (smart.tier === 'due_soon') {
     if (d === 1) return 'Check tomorrow'
-    if (d === 2) return 'Water within 2 days'
-    if (d != null && d > 2) return `Due in ${d} days`
-    return 'Due soon'
+    if (d === 2) return 'Within about 2 days'
+    if (d != null && d > 2) return `Due in about ${d} days`
+    return 'Coming up'
   }
 
   if (smart.tier === 'on_track') {
-    if (d != null && d > 2) return `Okay for ${d} more days`
-    if (d === 2) return 'Okay for 2 more days'
-    if (d === 1) return 'Okay for about a day'
-    return 'Okay for now'
+    if (d != null && d > 2) return `Comfortable for ~${d} more days`
+    if (d === 2) return 'Comfortable for a couple of days'
+    if (d === 1) return 'Comfortable for about a day'
+    return 'All good for now'
   }
 
-  return smart.headline || 'Okay for now'
+  return smart.headline || 'All good for now'
 }
 
 /**
@@ -50,7 +52,7 @@ export function formatNextDueSummary(nextRaw, outdoorDelayDays) {
     outdoorDelayDays ?? 0,
   )
   if (!eff || Number.isNaN(eff.getTime())) {
-    return 'Next watering: once scheduled'
+    return 'Next water: we’ll suggest one as you use Leafy'
   }
   const diff = calendarDaysDifferenceNY(new Date(), eff)
   if (diff < 0) {
@@ -76,8 +78,8 @@ export function formatNextDueSummary(nextRaw, outdoorDelayDays) {
 export function getTimingContextNote(plant, weatherContext) {
   if (!plant) return null
   if (plant.location === 'indoor') {
-    return 'Indoors — weather forecast doesn’t change this plant’s timing.'
+    return 'Indoor — weather won’t move this plant’s dates; only your care rhythm does.'
   }
   if (weatherContext?.adjustmentsActive === true) return null
-  return 'Outdoors — save a group location to layer weather-aware hints.'
+  return 'Outdoor — add a location for this space if you’d like rain-aware timing.'
 }

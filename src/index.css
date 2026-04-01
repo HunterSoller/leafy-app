@@ -1,4 +1,14 @@
 :root {
+  /* Layout & touch — mobile-first */
+  --tap-min: 48px;
+  --space-page: 20px;
+  --space-section: 22px;
+  --space-card: 16px;
+  --radius-ui: 16px;
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --dur-fast: 0.2s;
+  --dur-med: 0.35s;
+
   --cream: #f7f3ed;
   --parchment: #ede8df;
   --parchment-warm: #f3efe8;
@@ -106,8 +116,8 @@ body {
   position: sticky;
   top: 0;
   z-index: 20;
-  padding: 14px 20px calc(16px + env(safe-area-inset-top, 0));
-  padding-top: calc(14px + env(safe-area-inset-top, 0));
+  padding: 12px var(--space-page) calc(14px + env(safe-area-inset-top, 0));
+  padding-top: calc(12px + env(safe-area-inset-top, 0));
   background: rgba(251, 248, 243, 0.94);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
@@ -226,6 +236,43 @@ body {
   color: rgba(74, 55, 40, 0.55);
 }
 
+.group-weather-panel-loc-block {
+  margin-bottom: 4px;
+}
+
+.group-weather-panel-loc--with-action {
+  margin-bottom: 8px;
+}
+
+.btn-weather-change-loc {
+  display: inline-flex;
+  align-items: center;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 650;
+  color: rgba(74, 103, 65, 0.92);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.btn-weather-change-loc:active {
+  color: var(--moss);
+}
+
+.group-weather-updated {
+  margin: 0 0 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: rgba(74, 55, 40, 0.48);
+  letter-spacing: 0.02em;
+}
+
 .btn-weather-update {
   width: 100%;
   min-height: 48px;
@@ -278,6 +325,12 @@ body {
   font-weight: 500;
   color: var(--bark-muted);
   letter-spacing: 0.01em;
+}
+
+@media (max-width: 380px) {
+  .brand-tagline--optional {
+    display: none;
+  }
 }
 
 .group-context {
@@ -435,11 +488,52 @@ body {
 }
 
 .dashboard-loading {
+  min-height: 42vh;
   padding: 28px 0 40px;
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: flex-start;
   gap: 14px;
+}
+
+.calm-app-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin: 10px 20px 0;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  background: rgba(255, 248, 240, 0.95);
+  border: 1px solid rgba(212, 145, 58, 0.35);
+  box-shadow: var(--shadow-soft);
+}
+
+.calm-app-notice-text {
+  margin: 0;
+  flex: 1;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.45;
+  color: rgba(74, 55, 40, 0.88);
+}
+
+.calm-app-notice-dismiss {
+  flex-shrink: 0;
+  min-height: 40px;
+  padding: 0 12px;
+  border: none;
+  border-radius: 10px;
+  background: rgba(74, 55, 40, 0.06);
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 650;
+  color: #5c4030;
+  cursor: pointer;
+}
+
+.calm-app-notice-dismiss:active {
+  background: rgba(74, 55, 40, 0.1);
 }
 
 .dashboard-skeleton {
@@ -510,6 +604,7 @@ body {
   justify-content: center;
   padding: 16px;
   padding-bottom: max(16px, env(safe-area-inset-bottom, 16px));
+  animation: overlay-fade-in 0.28s var(--ease-out) both;
 }
 
 @media (min-width: 520px) {
@@ -528,6 +623,7 @@ body {
   padding: 22px 20px 20px;
   box-shadow: var(--shadow-lift);
   border: 1px solid var(--mist-soft);
+  animation: sheet-pop-in 0.38s var(--ease-out) both;
 }
 
 .group-loc-title {
@@ -675,8 +771,21 @@ body {
 }
 
 .app-main {
-  padding: 20px 20px 88px;
+  padding: 16px var(--space-page) 88px;
   -webkit-overflow-scrolling: touch;
+}
+
+.dashboard-focus-hint {
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.4;
+  color: #2f4a2c;
+  background: rgba(232, 240, 231, 0.55);
+  border-radius: var(--radius-ui);
+  border: 1px solid rgba(138, 175, 133, 0.28);
+  letter-spacing: 0.01em;
 }
 
 /* Today overview */
@@ -792,7 +901,7 @@ body {
 .plant-sections {
   display: flex;
   flex-direction: column;
-  gap: 28px;
+  gap: var(--space-section);
 }
 
 .plant-section {
@@ -804,9 +913,9 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin: 0 0 14px;
+  margin: 0 0 12px;
   font-family: var(--font-display);
-  font-size: 1.12rem;
+  font-size: 1.15rem;
   font-weight: 600;
   color: var(--bark);
   letter-spacing: -0.02em;
@@ -850,7 +959,7 @@ body {
 }
 
 .plant-list--section {
-  gap: 16px;
+  gap: 14px;
 }
 
 .plant-nothing-urgent {
@@ -870,28 +979,14 @@ body {
   color: #2f4a2c;
 }
 
-/* Group overview — counts, location, weather layer */
+/* Group overview — counts only (weather lives in header) */
 .group-dash-summary {
-  margin: 0 0 22px;
-  padding: 18px 16px 16px;
-  background: linear-gradient(
-    165deg,
-    rgba(255, 255, 255, 0.96) 0%,
-    rgba(232, 240, 231, 0.35) 100%
-  );
-  border: 1px solid rgba(138, 175, 133, 0.38);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-card);
-}
-
-.group-dash-summary-kicker {
-  margin: 0 0 12px;
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--moss);
-  opacity: 0.88;
+  margin: 0 0 18px;
+  padding: 14px 12px 12px;
+  background: rgba(255, 255, 255, 0.5);
+  border: 1px solid rgba(184, 201, 181, 0.35);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-soft);
 }
 
 .group-dash-stats {
@@ -912,11 +1007,11 @@ body {
   align-items: flex-start;
   justify-content: center;
   gap: 4px;
-  padding: 12px 12px 11px;
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.72);
-  border: 1px solid rgba(184, 201, 181, 0.4);
-  min-height: 76px;
+  padding: 10px 10px 9px;
+  border-radius: var(--radius-ui);
+  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid rgba(184, 201, 181, 0.32);
+  min-height: 72px;
 }
 
 .group-dash-stat--now.has-count {
@@ -944,33 +1039,16 @@ body {
   line-height: 1.25;
 }
 
-.group-dash-meta {
-  margin: 14px 0 0;
-  padding: 0;
-  list-style: none;
-}
-
-.group-dash-meta-line {
-  margin: 0 0 6px;
-  font-size: 13px;
-  line-height: 1.45;
-  color: rgba(74, 55, 40, 0.72);
-}
-
-.group-dash-meta-line:last-child {
-  margin-bottom: 0;
-}
-
 .group-dash-celebrate {
-  margin: 12px 0 0;
-  padding: 11px 12px;
-  font-size: 14px;
+  margin: 12px 4px 0;
+  padding: 10px 12px;
+  font-size: 13px;
   font-weight: 600;
   line-height: 1.4;
   color: #3d5c36;
-  background: rgba(138, 175, 133, 0.12);
-  border-radius: 12px;
-  border: 1px solid rgba(138, 175, 133, 0.25);
+  background: rgba(138, 175, 133, 0.1);
+  border-radius: var(--radius-ui);
+  border: 1px solid rgba(138, 175, 133, 0.22);
 }
 
 .all-set-toast {
@@ -992,13 +1070,14 @@ body {
   background: linear-gradient(165deg, var(--parchment-warm) 0%, var(--parchment) 100%);
   border: 1px solid var(--mist-soft);
   box-shadow: var(--shadow-soft), var(--shadow-lift);
-  padding: 20px 18px 4px;
+  padding: var(--space-card) var(--space-card) 2px;
   border-left: 4px solid var(--mist);
-  animation: card-in 0.5s ease both;
+  animation: card-in 0.45s var(--ease-out) both;
   overflow: hidden;
   transition:
-    box-shadow 0.25s ease,
-    border-color 0.25s ease;
+    box-shadow var(--dur-med) var(--ease-out),
+    border-color var(--dur-med) ease,
+    transform var(--dur-fast) var(--ease-out);
 }
 
 .plant-card.accent-ok {
@@ -1079,7 +1158,6 @@ body {
   .plant-card,
   .card-overdue,
   .drawer,
-  .watering-btn.has-ripple::after,
   .plant-card.plant-card--water-flash {
     animation: none !important;
   }
@@ -1334,36 +1412,37 @@ body {
   margin-bottom: 4px;
 }
 
-.plant-care-facts {
-  margin: 8px 0 14px;
-  padding: 12px 14px;
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.55);
-  border: 1px solid rgba(184, 201, 181, 0.35);
-}
-
-.plant-care-fact + .plant-care-fact {
-  margin-top: 10px;
+.plant-last-checkin {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 10px;
+  margin: 10px 0 12px;
   padding-top: 10px;
-  border-top: 1px solid rgba(184, 201, 181, 0.25);
+  border-top: 1px solid rgba(184, 201, 181, 0.35);
+  font-size: 13px;
+  line-height: 1.35;
 }
 
-.plant-care-fact-label {
-  display: block;
-  font-size: 10px;
+.plant-last-checkin-label {
   font-weight: 700;
+  font-size: 10px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: rgba(74, 55, 40, 0.48);
-  margin-bottom: 4px;
+  color: rgba(74, 55, 40, 0.45);
 }
 
-.plant-care-fact-value {
-  margin: 0;
-  font-size: 13px;
+.plant-last-checkin-value {
+  font-weight: 600;
+  color: rgba(74, 55, 40, 0.72);
+}
+
+.plant-trust-hint {
+  margin: 0 0 10px;
+  font-size: 12px;
   font-weight: 500;
   line-height: 1.4;
-  color: rgba(74, 55, 40, 0.78);
+  color: rgba(74, 103, 65, 0.82);
 }
 
 .plant-next-label {
@@ -1455,7 +1534,7 @@ body {
 }
 
 .plant-rhythm {
-  margin: 0 0 14px;
+  margin: 0 0 6px;
   font-size: 13px;
   font-weight: 500;
   color: var(--bark-muted);
@@ -1478,7 +1557,7 @@ body {
 }
 
 .plant-habit {
-  margin: 0 0 14px;
+  margin: 0 0 10px;
   font-size: 12px;
   font-weight: 600;
   color: var(--moss);
@@ -1543,38 +1622,44 @@ body {
 }
 
 .plant-card-actions {
-  margin-bottom: 6px;
-  padding-bottom: 4px;
+  margin-bottom: 4px;
+  padding-bottom: 2px;
 }
 
 .watering-btn {
   width: 100%;
-  min-height: 56px;
+  min-height: 52px;
   border: none;
-  border-radius: 16px;
+  border-radius: var(--radius-ui);
   background: linear-gradient(180deg, #537a4a 0%, var(--moss) 100%);
   color: var(--white);
   font-family: var(--font-body);
   font-size: 16px;
-  font-weight: 600;
+  font-weight: 650;
   letter-spacing: 0.02em;
   cursor: pointer;
   position: relative;
   overflow: hidden;
-  box-shadow: 0 2px 8px rgba(74, 103, 65, 0.25);
+  box-shadow: 0 2px 10px rgba(74, 103, 65, 0.22);
   transition:
-    background 0.2s ease,
-    transform 0.12s ease,
-    box-shadow 0.2s ease;
+    background var(--dur-fast) ease,
+    transform 0.14s var(--ease-out),
+    box-shadow var(--dur-fast) ease,
+    opacity var(--dur-fast) ease;
+}
+
+.watering-btn-label {
+  position: relative;
+  z-index: 1;
 }
 
 .watering-btn:disabled {
-  opacity: 0.85;
+  opacity: 0.88;
   cursor: wait;
 }
 
-.watering-btn.is-success {
-  background: var(--sage);
+.watering-btn.is-saving {
+  box-shadow: 0 1px 6px rgba(74, 103, 65, 0.18);
 }
 
 .watering-btn.is-overdue {
@@ -1582,24 +1667,7 @@ body {
 }
 
 .watering-btn:active:not(:disabled) {
-  transform: scale(0.98);
-}
-
-.watering-btn.has-ripple::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(circle, rgba(255, 255, 255, 0.45) 0%, transparent 55%);
-  transform: scale(0);
-  animation: ripple 0.55s ease-out;
-  pointer-events: none;
-}
-
-@keyframes ripple {
-  to {
-    transform: scale(2.2);
-    opacity: 0;
-  }
+  transform: scale(0.985);
 }
 
 @keyframes btn-pulse {
@@ -1614,7 +1682,7 @@ body {
 
 .care-info-wrap {
   border-top: 1px solid var(--mist-soft);
-  margin: 8px -18px 0;
+  margin: 6px calc(-1 * var(--space-card)) 0;
   background: rgba(255, 255, 255, 0.4);
   border-radius: 0 0 var(--radius-lg) var(--radius-lg);
   overflow: hidden;
@@ -1913,6 +1981,7 @@ body {
   display: flex;
   align-items: flex-end;
   justify-content: center;
+  animation: overlay-fade-in 0.25s var(--ease-out) both;
 }
 
 .drawer {
@@ -2375,15 +2444,173 @@ body {
   align-items: center;
   justify-content: center;
   padding: 24px;
+  animation: overlay-fade-in var(--dur-med) var(--ease-out) both;
 }
 
 .confirm-dialog {
   width: 100%;
   max-width: 360px;
   background: var(--cream);
-  border-radius: 20px;
+  border-radius: var(--radius-lg);
   padding: 24px;
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.2);
+  animation: sheet-pop-in 0.4s var(--ease-out) both;
+}
+
+@keyframes overlay-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes sheet-pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* Watering success — calm sheet over dashboard */
+.watering-celebration-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 150;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 16px;
+  padding-bottom: max(20px, env(safe-area-inset-bottom, 20px));
+  background: rgba(45, 38, 32, 0.38);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  animation: overlay-fade-in 0.28s var(--ease-out) both;
+}
+
+.watering-celebration-sheet {
+  width: 100%;
+  max-width: 480px;
+  padding: 22px 20px 20px;
+  background: linear-gradient(175deg, #fdfcfa 0%, var(--cream) 100%);
+  border-radius: var(--radius-lg);
+  border: 1px solid rgba(184, 201, 181, 0.45);
+  box-shadow:
+    0 -8px 40px rgba(74, 55, 40, 0.12),
+    var(--shadow-lift);
+  text-align: center;
+  animation: celebrate-up 0.42s var(--ease-out) both;
+}
+
+@keyframes celebrate-up {
+  from {
+    opacity: 0;
+    transform: translateY(18px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.watering-celebration-icon {
+  position: relative;
+  width: 56px;
+  height: 56px;
+  margin: 0 auto 14px;
+}
+
+.watering-celebration-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: rgba(138, 175, 133, 0.2);
+  animation: celebrate-ring 1.6s ease-out 0.15s both;
+}
+
+@keyframes celebrate-ring {
+  from {
+    transform: scale(0.72);
+    opacity: 0.9;
+  }
+  to {
+    transform: scale(1.35);
+    opacity: 0;
+  }
+}
+
+.watering-celebration-check {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--white);
+  background: linear-gradient(145deg, var(--sage), var(--moss));
+  box-shadow: 0 6px 20px rgba(74, 103, 65, 0.28);
+  animation: celebrate-check 0.45s var(--ease-out) both;
+}
+
+@keyframes celebrate-check {
+  from {
+    opacity: 0;
+    transform: scale(0.65);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.watering-celebration-title {
+  margin: 0 0 8px;
+  font-family: var(--font-display);
+  font-size: 1.35rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--bark);
+}
+
+.watering-celebration-desc {
+  margin: 0 0 18px;
+  font-size: 15px;
+  line-height: 1.45;
+  font-weight: 500;
+  color: rgba(74, 55, 40, 0.72);
+}
+
+.watering-celebration-desc strong {
+  color: var(--moss);
+  font-weight: 650;
+}
+
+.watering-celebration-done {
+  width: 100%;
+  min-height: var(--tap-min);
+  border: none;
+  border-radius: var(--radius-ui);
+  background: rgba(74, 103, 65, 0.1);
+  color: #2f4a2c;
+  font-family: inherit;
+  font-size: 16px;
+  font-weight: 650;
+  cursor: pointer;
+  transition:
+    background var(--dur-fast) ease,
+    transform 0.12s var(--ease-out);
+}
+
+.watering-celebration-done:active {
+  transform: scale(0.99);
+  background: rgba(74, 103, 65, 0.16);
 }
 
 .confirm-title {
@@ -2735,6 +2962,43 @@ body {
   max-width: 32em;
 }
 
+.add-plant-mode-toggle {
+  display: flex;
+  gap: 8px;
+  margin: 14px 0 18px;
+  padding: 4px;
+  border-radius: 14px;
+  background: rgba(74, 55, 40, 0.06);
+}
+
+.add-plant-mode-toggle button {
+  flex: 1;
+  min-height: 44px;
+  padding: 0 12px;
+  border: none;
+  border-radius: 11px;
+  background: transparent;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 650;
+  color: rgba(74, 55, 40, 0.55);
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
+}
+
+.add-plant-mode-toggle button.is-active {
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--bark);
+  box-shadow: var(--shadow-soft);
+}
+
+.add-plant-mode-toggle button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .add-plant-photo-block {
   margin-bottom: 16px;
 }
@@ -2993,6 +3257,42 @@ body {
 }
 
 /* ─── First-time group welcome (NFC / unique link) ─── */
+@keyframes welcome-intro-up {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes welcome-intro-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.group-welcome--intro .group-welcome-header--intro {
+  animation: welcome-intro-fade 0.65s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.group-welcome--intro .group-welcome-hero {
+  animation: welcome-intro-up 0.72s cubic-bezier(0.22, 1, 0.36, 1) 0.08s both;
+}
+
+.group-welcome--intro .group-welcome-card {
+  animation: welcome-intro-up 0.78s cubic-bezier(0.22, 1, 0.36, 1) 0.2s both;
+}
+
+.group-welcome--bootstrap.group-welcome--intro .group-welcome-loading {
+  animation: welcome-intro-fade 0.55s cubic-bezier(0.22, 1, 0.36, 1) 0.12s both;
+}
+
 .group-welcome {
   position: fixed;
   inset: 0;
@@ -3017,6 +3317,12 @@ body {
   transition:
     opacity 0.5s ease,
     transform 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.group-welcome--saving .group-welcome-inner {
+  opacity: 0.72;
+  pointer-events: none;
+  transition: opacity 0.25s ease;
 }
 
 .group-welcome--exit {
@@ -3151,6 +3457,44 @@ body {
   line-height: 1.4;
   color: rgba(74, 55, 40, 0.52);
   font-weight: 500;
+}
+
+.btn-welcome-hero-cta {
+  margin-top: 22px;
+  width: 100%;
+  min-height: 56px;
+  padding: 0 22px;
+  border: none;
+  border-radius: 16px;
+  font-family: var(--font-body);
+  font-size: 17px;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+  color: var(--white);
+  cursor: pointer;
+  background: linear-gradient(175deg, #5a8250 0%, var(--moss) 45%, #3d5238 100%);
+  box-shadow:
+    0 2px 8px rgba(74, 103, 65, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18);
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.2s ease,
+    opacity 0.2s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.btn-welcome-hero-cta:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.btn-welcome-hero-cta:disabled {
+  opacity: 0.72;
+  cursor: wait;
+}
+
+.group-welcome-actions--dim {
+  opacity: 0.45;
+  pointer-events: none;
 }
 
 .group-welcome-card {
@@ -3385,9 +3729,38 @@ body {
   .group-welcome,
   .group-welcome--exit,
   .group-welcome-success-card,
-  .dashboard-layer--reveal {
+  .group-welcome--intro .group-welcome-header--intro,
+  .group-welcome--intro .group-welcome-hero,
+  .group-welcome--intro .group-welcome-card,
+  .group-welcome--bootstrap.group-welcome--intro .group-welcome-loading,
+  .dashboard-layer--reveal,
+  .watering-celebration-backdrop,
+  .watering-celebration-sheet,
+  .watering-celebration-ring,
+  .watering-celebration-check,
+  .confirm-overlay,
+  .confirm-dialog,
+  .group-loc-backdrop,
+  .group-loc-modal,
+  .drawer-backdrop,
+  .drawer {
     animation: none !important;
     transition: none !important;
+  }
+
+  .group-welcome--intro .group-welcome-header--intro,
+  .group-welcome--intro .group-welcome-hero,
+  .group-welcome--intro .group-welcome-card,
+  .group-welcome--bootstrap.group-welcome--intro .group-welcome-loading {
+    opacity: 1;
+    transform: none;
+  }
+
+  .watering-celebration-sheet,
+  .confirm-dialog,
+  .group-loc-modal {
+    opacity: 1;
+    transform: none;
   }
 
   .dashboard-layer--obscured {

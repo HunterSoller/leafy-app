@@ -3,7 +3,7 @@ import { StatusBadge } from './StatusBadge'
 import { CareInfoPanel } from './CareInfoPanel'
 import { WateringButton } from './WateringButton'
 import { getWateringStatus } from '../lib/wateringLogic'
-import { getSmartPlantStatus, softPersonaLine } from '../lib/smartPlantStatus'
+import { getSmartPlantStatus } from '../lib/smartPlantStatus'
 import {
   getScanFriendlyStatus,
   getTierBadgeShort,
@@ -98,17 +98,17 @@ export function PlantCard({
         ? 'status-due-today'
         : 'status-ok'
 
+  const displayTitle =
+    String(plant.name || plant.displayName || '').trim() || 'Plant'
+
   const lastLine = formatTimeAgo(plant.lastWatered?.toDate?.() ?? plant.lastWatered)
+  const weatherCtx = weatherOptions?.weatherContext
   const intervalDays = getPlantIntervalDays(plant)
   const typeLabel = plantTypeDetectedLabel(plant)
   const sceneLabel = plantingSceneLabel(plant)
   const careBasisChip = getCareBasisChip(plant)
   const waterCount = plant.totalWaterCount ?? 0
   const reasonText = smart.reasonLine ?? smart.subline
-  const personaLine =
-    useBalance && reasonText
-      ? null
-      : softPersonaLine(smart.tier, smart.nextInDays, plant.id)
   const setupCare = getOutdoorSetupLine(plant)
   const weatherCare =
     plant.location === 'outdoor'
@@ -166,9 +166,9 @@ export function PlantCard({
               type="button"
               className="plant-name-tap"
               onClick={() => onEdit(plant)}
-              aria-label={`View or edit ${plant.name}`}
+              aria-label={`View or edit ${displayTitle}`}
             >
-              {plant.name}
+              {displayTitle}
             </button>
           </h3>
           <div className="plant-card-badges">
@@ -245,7 +245,7 @@ export function PlantCard({
       {typeLabel && <p className="plant-type-subtle">{typeLabel}</p>}
 
       <div className="plant-card-status-block">
-        <p className="plant-next-label">Schedule</p>
+        <p className="plant-next-label">Next water</p>
         <p className={`plant-due-next-line ${heroTone}`}>{nextDueLine}</p>
         {reasonText ? (
           <p className="plant-due-reason">{reasonText}</p>
@@ -253,31 +253,27 @@ export function PlantCard({
         {timingCtx ? (
           <p className="plant-timing-ctx">{timingCtx}</p>
         ) : null}
+        {plant.location === 'outdoor' &&
+        weatherCtx?.adjustmentsActive &&
+        smart.rainChipLabel ? (
+          <p className="plant-trust-hint">
+            Timing may ease slightly when rain helps the soil — trust what you see
+            in the pot.
+          </p>
+        ) : null}
         {smart.checkSoilHint ? (
           <p className="plant-due-soil-hint">{smart.checkSoilHint}</p>
         ) : null}
-        {personaLine && (
-          <p className="plant-persona">{personaLine}</p>
-        )}
         <p className="plant-rhythm">{rhythmText}</p>
+        <p className="plant-last-checkin">
+          <span className="plant-last-checkin-label">Last watered</span>
+          <span className="plant-last-checkin-value">
+            {(smart.manualWaterLine ?? lastLine) || 'Not logged yet'}
+          </span>
+        </p>
       </div>
 
-      <div className="plant-care-facts" aria-label="Watering details">
-        <div className="plant-care-fact">
-          <span className="plant-care-fact-label">Last watered (manual)</span>
-          <p className="plant-care-fact-value">
-            {smart.manualWaterLine ?? lastLine}
-          </p>
-        </div>
-        {smart.weatherAdjustmentLine ? (
-          <div className="plant-care-fact">
-            <span className="plant-care-fact-label">Weather / rain layer</span>
-            <p className="plant-care-fact-value">{smart.weatherAdjustmentLine}</p>
-          </div>
-        ) : null}
-      </div>
-
-      {habitLine && <p className="plant-habit">{habitLine}</p>}
+      {habitLine ? <p className="plant-habit">{habitLine}</p> : null}
 
       <div className="plant-card-actions">
         <WateringButton

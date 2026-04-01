@@ -1,4 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import {
+  startTransition,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from 'react'
 import { fetchWeatherForLatLng } from '../lib/weatherApi'
 
 const EMPTY_INTEL = {
@@ -39,7 +45,9 @@ export function useWeather(_groupId, groupSettings, groupSettingsLoading) {
   const [intel, setIntel] = useState(null)
 
   useEffect(() => {
-    if (coords === 'loading') setIntel(null)
+    if (coords === 'loading') {
+      startTransition(() => setIntel(null))
+    }
   }, [coords])
 
   const refresh = useCallback(async () => {
@@ -134,6 +142,14 @@ export function useWeather(_groupId, groupSettings, groupSettingsLoading) {
       !Number.isNaN(Number(groupSettings.location_lng)),
   )
 
+  const weatherFetchedAt =
+    intel &&
+    !intel.error &&
+    !intel.weatherNeutral &&
+    typeof intel.fetchedAt === 'number'
+      ? intel.fetchedAt
+      : null
+
   return {
     intel,
     weatherContext,
@@ -146,6 +162,7 @@ export function useWeather(_groupId, groupSettings, groupSettingsLoading) {
     weatherNeutral: Boolean(intel?.weatherNeutral),
     usingLegacyDefaultCoords: false,
     usingSavedGroupCoords,
+    weatherFetchedAt,
     refresh,
     delayForPlant,
     weatherOptionsForPlant,

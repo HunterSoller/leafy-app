@@ -60,13 +60,16 @@ function rainTierFromMm(combined) {
   return 'heavy'
 }
 
+/**
+ * Rain-aware delay (days) for outdoor plants only — capped later in net shift.
+ * Light rain nudges a little; heavy rain nudges more (never replaces your schedule).
+ */
 function rainDelayDaysFromMm(mm48, mmTomorrow) {
   let d = 0
   if (mm48 < 0.5) d = 0
-  else if (mm48 < 2.5) d = 0
-  else if (mm48 < 4) d = 0
+  else if (mm48 < 2.5) d = 1
   else if (mm48 < 6) d = 1
-  else if (mm48 < 14) d = 1
+  else if (mm48 < 14) d = 2
   else if (mm48 < 28) d = 2
   else d = 3
 
@@ -158,9 +161,12 @@ export function deriveWeatherIntel(json) {
   let bannerMessage = null
   if (rainDelayDays >= 2) {
     bannerMessage =
-      '🌧️ Soaking rain nearby — outdoor watering eased for a couple of days'
+      'Heavy rain nearby — outdoor dates are eased a bit; you can still water if the soil feels dry.'
   } else if (rainDelayDays === 1) {
-    bannerMessage = '🌧️ Recent rain — outdoor plants may need less right now'
+    bannerMessage =
+      mmCombined48h < 2.5
+        ? 'A little rain nearby — outdoor timing shifted slightly.'
+        : 'Recent rain — outdoor plants may need a little less right now.'
   }
 
   const resolvedTier =

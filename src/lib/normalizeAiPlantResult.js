@@ -308,7 +308,7 @@ export function normalizeNameHintForRules(nameHint) {
 /**
  * Photo identification never auto-saves — user must confirm on the review step.
  */
-export function shouldAutoSaveAfterAi(_n) {
+export function shouldAutoSaveAfterAi() {
   return false
 }
 

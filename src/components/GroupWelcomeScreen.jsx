@@ -1,21 +1,15 @@
-import { useCallback } from 'react'
+import { useCallback, useRef } from 'react'
 import { useGroupLocationSetup } from '../hooks/useGroupLocationSetup'
 
 /**
  * Full-screen first visit for a unique group without a saved forecast location.
- * Reuses the same save path as GroupLocationModal.
  */
 export function GroupWelcomeScreen({
   groupLabel,
   saveLocation,
-  onSkip,
-  onSavedSequence,
-  phase = 'idle',
-  settingsLoading,
+  phase = null,
 }) {
-  const afterSave = useCallback(async () => {
-    await onSavedSequence?.()
-  }, [onSavedSequence])
+  const cardRef = useRef(null)
 
   const {
     geoBusy,
@@ -31,14 +25,19 @@ export function GroupWelcomeScreen({
     requestBrowserLocation,
     runManualSearch,
     saveCoords,
-  } = useGroupLocationSetup(saveLocation, { afterSave })
+  } = useGroupLocationSetup(saveLocation)
 
   const showSuccess = phase === 'success' || phase === 'exit'
+  const saving = phase === 'saving'
+
+  const scrollToSetup = useCallback(() => {
+    cardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+  }, [])
 
   return (
     <div
-      className={`group-welcome ${phase === 'exit' ? 'group-welcome--exit' : ''}`}
-      aria-busy={settingsLoading || geoBusy}
+      className={`group-welcome ${phase === 'exit' ? 'group-welcome--exit' : ''} ${saving ? 'group-welcome--saving' : ''} ${showSuccess ? '' : 'group-welcome--intro'}`}
+      aria-busy={geoBusy || saving}
     >
       <div className="group-welcome-bg" aria-hidden>
         <div className="group-welcome-bg-blob group-welcome-bg-blob--1" />
@@ -47,7 +46,7 @@ export function GroupWelcomeScreen({
       </div>
 
       <div className="group-welcome-inner">
-        <header className="group-welcome-header">
+        <header className="group-welcome-header group-welcome-header--intro">
           <div className="group-welcome-brand">
             <span className="group-welcome-brand-leaf" aria-hidden>
               🌿
@@ -56,24 +55,15 @@ export function GroupWelcomeScreen({
           </div>
         </header>
 
-        {settingsLoading ? (
-          <div className="group-welcome-loading" role="status">
-            <div className="loading-dots" aria-hidden>
-              <span />
-              <span />
-              <span />
-            </div>
-            <p className="group-welcome-loading-text">Preparing your space…</p>
-          </div>
-        ) : showSuccess ? (
+        {showSuccess ? (
           <div className="group-welcome-success-card" role="status">
             <div className="group-welcome-success-icon" aria-hidden>
               ✓
             </div>
             <h2 className="group-welcome-success-title">You&apos;re all set</h2>
             <p className="group-welcome-success-sub">
-              Weather-aware tips will personalize watering for{' '}
-              <strong>{groupLabel}</strong>. Opening your dashboard…
+              Weather-aware care will stay tuned to{' '}
+              <strong>{groupLabel}</strong>. Opening your space…
             </p>
           </div>
         ) : (
@@ -81,20 +71,36 @@ export function GroupWelcomeScreen({
             <div className="group-welcome-hero">
               <h1 className="group-welcome-title">Welcome to Leafy</h1>
               <p className="group-welcome-subtitle">
-                Set this group&apos;s location once so we can tailor outdoor
-                watering to real rain and temperature — starting with{' '}
+                Set this space&apos;s location so watering and weather stay
+                accurate for{' '}
                 <span className="group-welcome-space">{groupLabel}</span>.
               </p>
               <p className="group-welcome-once">
-                One quick step for this space. Other groups stay separate.
+                This only needs to be done once for this space. Other links stay
+                separate.
               </p>
+              <button
+                type="button"
+                className="btn-welcome-hero-cta"
+                onClick={() => {
+                  scrollToSetup()
+                  void requestBrowserLocation()
+                }}
+                disabled={geoBusy || manualBusy || saving}
+              >
+                {saving
+                  ? 'Saving…'
+                  : geoBusy
+                    ? 'Requesting location…'
+                    : "Set this space's location"}
+              </button>
             </div>
 
-            <div className="group-welcome-card">
-              <h2 className="group-welcome-card-title">Set this group&apos;s location</h2>
+            <div className="group-welcome-card" ref={cardRef}>
+              <h2 className="group-welcome-card-title">How would you like to pin it?</h2>
               <p className="group-welcome-card-lede">
-                Indoor plants always follow your rhythm; outdoors gets smarter
-                with local weather when you save a spot.
+                Outdoor plants can follow real rain and temperature; indoor care
+                stays on your rhythm.
               </p>
 
               {geoError ? (
@@ -103,19 +109,19 @@ export function GroupWelcomeScreen({
                 </p>
               ) : (
                 <p className="group-welcome-hint">
-                  Saved only for this NFC space — never shared with your other
-                  groups.
+                  Saved only for this space — never shared with your other Leafy
+                  links.
                 </p>
               )}
 
-              <div className="group-welcome-actions">
+              <div className={`group-welcome-actions ${saving ? 'group-welcome-actions--dim' : ''}`}>
                 <button
                   type="button"
-                  className="btn-welcome-primary"
+                  className="btn-welcome-secondary"
                   onClick={requestBrowserLocation}
-                  disabled={geoBusy || manualBusy}
+                  disabled={geoBusy || manualBusy || saving}
                 >
-                  {geoBusy ? 'Requesting location…' : 'Use my location'}
+                  {geoBusy ? 'Requesting location…' : 'Use my precise location'}
                 </button>
                 <button
                   type="button"
@@ -124,9 +130,9 @@ export function GroupWelcomeScreen({
                     setManualOpen(true)
                     setGeoError(null)
                   }}
-                  disabled={geoBusy || manualBusy}
+                  disabled={geoBusy || manualBusy || saving}
                 >
-                  Enter city or ZIP instead
+                  Search city or ZIP
                 </button>
               </div>
 
@@ -153,7 +159,7 @@ export function GroupWelcomeScreen({
                     type="button"
                     className="btn-welcome-secondary btn-welcome-secondary--search"
                     onClick={() => void runManualSearch()}
-                    disabled={manualBusy || !manualQuery.trim()}
+                    disabled={manualBusy || !manualQuery.trim() || saving}
                   >
                     {manualBusy ? 'Searching…' : 'Search'}
                   </button>
@@ -172,6 +178,7 @@ export function GroupWelcomeScreen({
                                 location_source: 'manual',
                               })
                             }
+                            disabled={saving}
                           >
                             {r.label}
                           </button>
@@ -182,15 +189,6 @@ export function GroupWelcomeScreen({
                 </div>
               )}
             </div>
-
-            <button
-              type="button"
-              className="btn-welcome-skip"
-              onClick={onSkip}
-              disabled={geoBusy}
-            >
-              I&apos;ll do this later
-            </button>
           </>
         )}
       </div>

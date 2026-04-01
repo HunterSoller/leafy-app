@@ -10,7 +10,6 @@ export function GroupLocationModal({
   groupLabel,
   isDefaultGroup,
   saveLocation,
-  onSkipNotNow,
 }) {
   const afterSave = useCallback(async () => {
     onClose()
@@ -98,13 +97,10 @@ export function GroupLocationModal({
           <button
             type="button"
             className="btn-ghost-inline"
-            onClick={() => {
-              if (!isDefaultGroup) onSkipNotNow?.()
-              handleClose()
-            }}
+            onClick={handleClose}
             disabled={geoBusy}
           >
-            {isDefaultGroup ? 'Cancel' : 'Not now'}
+            {isDefaultGroup ? 'Cancel' : 'Close'}
           </button>
         </div>
 

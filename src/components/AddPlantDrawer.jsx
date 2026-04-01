@@ -71,6 +71,8 @@ export function AddPlantDrawer({
   const confirmBaselineRef = useRef(null)
   /** Outdoor: growing in a pot vs in-ground / bed */
   const [outdoorIsContainer, setOutdoorIsContainer] = useState(false)
+  /** quick = name + indoor/outdoor only; full = photo, presets, pot, etc. */
+  const [addMode, setAddMode] = useState('quick')
 
   useEffect(() => {
     if (!open) return
@@ -103,6 +105,7 @@ export function AddPlantDrawer({
     } else {
       setForm(emptyForm())
       setOutdoorIsContainer(false)
+      setAddMode('quick')
     }
   }, [open, plantToEdit])
 
@@ -156,7 +159,7 @@ export function AddPlantDrawer({
   const hasPhoto = Boolean(form.imageUrl)
   const manualFallback = analyzeError
   const isCreate = !plantToEdit?.id
-  const nameRequiredForCreate = isCreate && !hasPhoto
+  const nameRequiredForCreate = isCreate && (addMode === 'quick' || !hasPhoto)
   const nameRequired = nameRequiredForCreate || Boolean(plantToEdit)
 
   const showPotForOutdoor = form.location === 'outdoor' && outdoorIsContainer
@@ -214,7 +217,7 @@ export function AddPlantDrawer({
       const { aiFallback = false } = opts
       const trimmed = form.name.trim()
       if (!trimmed) {
-        setSaveError('Add a name so Leafy can build the plan.')
+        setSaveError('Add a name to continue — anything you’ll recognize is fine.')
         return
       }
       setSaving(true)
@@ -339,8 +342,12 @@ export function AddPlantDrawer({
       await handleSaveEdit()
       return
     }
+    if (addMode === 'quick') {
+      await saveRulesOnly()
+      return
+    }
     await handlePrimaryCreate()
-  }, [handlePrimaryCreate, handleSaveEdit, plantToEdit])
+  }, [addMode, handlePrimaryCreate, handleSaveEdit, plantToEdit, saveRulesOnly])
 
   const handleConfirmSavePlant = useCallback(async () => {
     if (!aiNormalized) return
@@ -408,19 +415,24 @@ export function AddPlantDrawer({
 
   if (!open) return null
 
-  const createPrimaryLabel = manualFallback
-    ? saving
-      ? 'Saving…'
-      : 'Save & plan care'
-    : flowStep === 'analyzing'
-      ? '…'
-      : hasPhoto
+  const createPrimaryLabel =
+    addMode === 'quick'
+      ? saving
+        ? 'Saving…'
+        : 'Add plant'
+      : manualFallback
         ? saving
-          ? '…'
-          : 'Analyze photo'
-        : saving
           ? 'Saving…'
           : 'Save & plan care'
+        : flowStep === 'analyzing'
+          ? '…'
+          : hasPhoto
+            ? saving
+              ? '…'
+              : 'Analyze photo'
+            : saving
+              ? 'Saving…'
+              : 'Save & plan care'
 
   const showConfirm = flowStep === 'confirm' && !plantToEdit
   const showAnalyzing = flowStep === 'analyzing' && !plantToEdit
@@ -557,11 +569,41 @@ export function AddPlantDrawer({
                   {plantToEdit ? 'Edit plant' : 'New plant'}
                 </h2>
                 <p className="drawer-lede drawer-lede--add">
-                  Take a photo or add a name — Leafy will build the care plan.
+                  {plantToEdit
+                    ? 'Update how this plant appears and where it lives.'
+                    : addMode === 'quick'
+                      ? 'Add a name and where it lives. You can snap a photo or fine-tune care anytime from edit.'
+                      : 'Add a photo or a name — Leafy will suggest a gentle care rhythm.'}
                 </p>
               </header>
 
-              {/* A — Photo first */}
+              {!plantToEdit ? (
+                <div
+                  className="add-plant-mode-toggle"
+                  role="group"
+                  aria-label="Add plant style"
+                >
+                  <button
+                    type="button"
+                    className={addMode === 'quick' ? 'is-active' : ''}
+                    onClick={() => setAddMode('quick')}
+                    disabled={saving || imageBusy}
+                  >
+                    Quick add
+                  </button>
+                  <button
+                    type="button"
+                    className={addMode === 'full' ? 'is-active' : ''}
+                    onClick={() => setAddMode('full')}
+                    disabled={saving || imageBusy}
+                  >
+                    Photo & details
+                  </button>
+                </div>
+              ) : null}
+
+              {/* A — Photo first (full mode) */}
+              {addMode === 'full' || plantToEdit ? (
               <section className="add-plant-photo-block" aria-label="Photo">
                 <div className="add-plant-label-row">
                   <span className="field-label field-label-photo">Photo</span>
@@ -635,6 +677,7 @@ export function AddPlantDrawer({
                   </p>
                 )}
               </section>
+              ) : null}
 
               {/* B — Environment */}
               <section className="add-plant-env" aria-label="Where is it">
@@ -699,7 +742,7 @@ export function AddPlantDrawer({
                 </label>
               </section>
 
-              {form.location === 'outdoor' ? (
+              {(addMode === 'full' || plantToEdit) && form.location === 'outdoor' ? (
                 <section className="add-plant-outdoor-mode field--deemphasized">
                   <span className="field-label field-label-subtle">
                     Growing in a container?
@@ -728,7 +771,7 @@ export function AddPlantDrawer({
                 </section>
               ) : null}
 
-              {!plantToEdit ? (
+              {!plantToEdit && addMode === 'full' ? (
                 <section className="add-plant-env" aria-label="Last watered">
                   <span className="field-label field-label-photo">
                     When was it last watered?
@@ -761,7 +804,7 @@ export function AddPlantDrawer({
               ) : null}
 
               {/* Pot — last, muted */}
-              {showPotSection ? (
+              {(addMode === 'full' || plantToEdit) && showPotSection ? (
                 <section className="field field--pot-muted field--last" aria-label="Container size">
                   <span className="field-label field-label-faint">
                     Container size <span className="field-optional">(optional)</span>

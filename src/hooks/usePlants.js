@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import {
+  startTransition,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useState,
+} from 'react'
 import {
   subscribePlants,
   createPlant,
@@ -16,11 +23,15 @@ import {
   computeJitterDays,
 } from '../lib/plantCareRules'
 import { clampWateringIntervalDays } from '../lib/normalizeAiPlantResult'
+import {
+  readCachedPlantsList,
+  writeCachedPlantsList,
+} from '../lib/plantsLocalCache'
 
 function isFirebaseConfigured() {
   return Boolean(
     import.meta.env.VITE_FIREBASE_PROJECT_ID &&
-    import.meta.env.VITE_FIREBASE_API_KEY,
+      import.meta.env.VITE_FIREBASE_API_KEY,
   )
 }
 
@@ -97,7 +108,10 @@ function mergeAiNormalizedForSave(raw, overrides = {}) {
     env,
   )
   let detectedType = raw.detectedType
-  if (overrides.detectedTypeOverride && String(overrides.detectedTypeOverride).trim()) {
+  if (
+    overrides.detectedTypeOverride &&
+    String(overrides.detectedTypeOverride).trim()
+  ) {
     detectedType = slugFromName(String(overrides.detectedTypeOverride).trim())
   }
   let typeLabel = raw.typeLabel
@@ -110,9 +124,25 @@ function mergeAiNormalizedForSave(raw, overrides = {}) {
 export function usePlants() {
   const groupId = useGroupId()
   const configured = useMemo(() => isFirebaseConfigured(), [])
+
   const [plants, setPlants] = useState([])
-  const [loading, setLoading] = useState(() => configured)
+  const [hasRemoteSync, setHasRemoteSync] = useState(false)
   const [error, setError] = useState(null)
+
+  useLayoutEffect(() => {
+    startTransition(() => {
+      if (!configured) {
+        setPlants([])
+        setHasRemoteSync(true)
+        setError(null)
+        return
+      }
+      const cached = readCachedPlantsList(groupId)
+      setPlants(cached ?? [])
+      setHasRemoteSync(false)
+      setError(null)
+    })
+  }, [configured, groupId])
 
   useEffect(() => {
     if (!configured) return undefined
@@ -121,16 +151,19 @@ export function usePlants() {
       groupId,
       (list) => {
         setPlants(list)
-        setLoading(false)
+        writeCachedPlantsList(groupId, list)
+        setHasRemoteSync(true)
         setError(null)
       },
       (err) => {
         setError(err)
-        setLoading(false)
+        setHasRemoteSync(true)
       },
     )
     return unsub
   }, [configured, groupId])
+
+  const loading = configured && !hasRemoteSync && plants.length === 0
 
   const addPlant = useCallback(
     async (payload) => {
@@ -185,7 +218,7 @@ export function usePlants() {
           : true)
 
       const initWater = initialHydrationForNewPlant({
-        lastWateredDate: lastWateredDate,
+        lastWateredDate,
         intervalDays: care.wateringIntervalDays,
         location: rest.location,
         weather: null,
@@ -219,7 +252,8 @@ export function usePlants() {
         confidence: useAiCare ? nMerged.confidence : null,
         aiGenerated: Boolean(aiNormalized),
         aiCorrectedByUser: Boolean(aiCorrectedByUser && aiNormalized),
-        aiSuggestedDisplayName: aiSuggestedDisplayName ?? aiNormalized?.displayName ?? null,
+        aiSuggestedDisplayName:
+          aiSuggestedDisplayName ?? aiNormalized?.displayName ?? null,
         fallbackUsed: aiNormalized ? aiNormalized.fallbackUsed : aiFallback,
       })
     },
@@ -320,10 +354,13 @@ export function usePlants() {
     })
   }, [])
 
+  const clearError = useCallback(() => setError(null), [])
+
   return {
     plants,
     loading,
     error,
+    clearError,
     configured,
     groupId,
     addPlant,
