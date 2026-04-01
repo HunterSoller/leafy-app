@@ -3,16 +3,48 @@ import { PotSizeSelector } from './PotSizeSelector'
 import { prepareImageForIdentify } from '../lib/imagePrep'
 import { identifyPlantRequest } from '../lib/identifyPlantClient'
 import {
-  shouldAutoSaveAfterAi,
   confirmExplanationLine,
+  identificationHeadline,
 } from '../lib/normalizeAiPlantResult'
+import { normalizePlantName } from '../lib/plantCareRules'
+import { addCalendarDaysNY } from '../lib/wateringLogic'
+
+function slugFromReviewSpecies(s) {
+  return normalizePlantName(s).replace(/\s+/g, '_').slice(0, 48) || 'plant'
+}
+
+function speciesLabelFromNormalized(n) {
+  const slug = String(n.detectedType || '')
+    .replace(/_/g, ' ')
+    .trim()
+  if (!slug || slug === 'plant') return String(n.displayName || '').trim()
+  return slug.replace(/\b\w/g, (ch) => ch.toUpperCase())
+}
 
 const emptyForm = () => ({
   name: '',
   location: 'indoor',
   potSize: '',
   imageUrl: null,
+  lastWateredPreset: '',
 })
+
+function lastWateredDateFromPreset(preset) {
+  if (!preset) return null
+  const now = new Date()
+  switch (preset) {
+    case 'today':
+      return now
+    case 'yesterday':
+      return addCalendarDaysNY(now, -1)
+    case 'few':
+      return addCalendarDaysNY(now, -3)
+    case 'week':
+      return addCalendarDaysNY(now, -7)
+    default:
+      return null
+  }
+}
 
 export function AddPlantDrawer({
   open,
@@ -30,9 +62,13 @@ export function AddPlantDrawer({
   const [flowStep, setFlowStep] = useState('form')
   const [loadingPhase, setLoadingPhase] = useState(0)
   const [aiNormalized, setAiNormalized] = useState(null)
-  const [confirmSubstep, setConfirmSubstep] = useState('pick')
   const [reviewName, setReviewName] = useState('')
+  const [reviewLocation, setReviewLocation] = useState('indoor')
+  const [reviewIntervalDays, setReviewIntervalDays] = useState('')
+  const [reviewScientific, setReviewScientific] = useState('')
+  const [reviewSpecies, setReviewSpecies] = useState('')
   const [analyzeError, setAnalyzeError] = useState(false)
+  const confirmBaselineRef = useRef(null)
   /** Outdoor: growing in a pot vs in-ground / bed */
   const [outdoorIsContainer, setOutdoorIsContainer] = useState(false)
 
@@ -43,8 +79,12 @@ export function AddPlantDrawer({
     setFlowStep('form')
     setLoadingPhase(0)
     setAiNormalized(null)
-    setConfirmSubstep('pick')
+    confirmBaselineRef.current = null
     setReviewName('')
+    setReviewLocation('indoor')
+    setReviewIntervalDays('')
+    setReviewScientific('')
+    setReviewSpecies('')
     if (plantToEdit) {
       const ps =
         plantToEdit.potSize !== undefined && plantToEdit.potSize !== null
@@ -55,6 +95,7 @@ export function AddPlantDrawer({
         location: plantToEdit.location || 'indoor',
         potSize: ps,
         imageUrl: plantToEdit.imageUrl ?? null,
+        lastWateredPreset: '',
       })
       setOutdoorIsContainer(
         plantToEdit.location === 'outdoor' && Boolean(ps),
@@ -125,25 +166,47 @@ export function AddPlantDrawer({
   const commitCreate = useCallback(
     async ({
       name,
+      location: locationOverride,
       aiNormalized: norm,
       aiCorrectedByUser,
       aiFallback,
+      wateringIntervalDaysOverride,
+      detectedTypeOverride,
+      typeLabelOverride,
+      scientificName,
     }) => {
+      const loc = locationOverride ?? form.location
       await onCreate({
         name: name.trim(),
-        location: form.location,
+        location: loc,
         potSize: form.potSize ?? '',
         imageUrl: form.imageUrl,
         aiNormalized: norm,
         aiCorrectedByUser,
         aiSuggestedDisplayName: norm?.displayName,
         aiFallback,
+        lastWateredAt: lastWateredDateFromPreset(form.lastWateredPreset),
+        wateringIntervalDaysOverride,
+        detectedTypeOverride,
+        typeLabelOverride,
+        scientificName,
       })
       if (norm && !aiFallback && onPhotoPlanReady) {
-        onPhotoPlanReady(name.trim())
+        const isArea =
+          norm.sceneType === 'garden_area' ||
+          norm.sceneType === 'multiple_plants' ||
+          norm.matchKind === 'area'
+        onPhotoPlanReady({ displayName: name.trim(), isArea })
       }
     },
-    [form.imageUrl, form.location, form.potSize, onCreate, onPhotoPlanReady],
+    [
+      form.imageUrl,
+      form.lastWateredPreset,
+      form.location,
+      form.potSize,
+      onCreate,
+      onPhotoPlanReady,
+    ],
   )
 
   const saveRulesOnly = useCallback(
@@ -188,19 +251,18 @@ export function AddPlantDrawer({
       })
       setAiNormalized(normalized)
 
-      if (shouldAutoSaveAfterAi(normalized)) {
-        await commitCreate({
-          name: normalized.displayName,
-          aiNormalized: normalized,
-          aiCorrectedByUser: false,
-          aiFallback: false,
-        })
-        onClose()
-        return
+      confirmBaselineRef.current = {
+        displayName: normalized.displayName,
+        scientificName: normalized.scientificName || '',
+        wateringIntervalDays: normalized.wateringIntervalDays,
+        location: form.location,
+        detectedType: normalized.detectedType,
       }
-
       setReviewName(normalized.displayName)
-      setConfirmSubstep('pick')
+      setReviewLocation(form.location)
+      setReviewIntervalDays(String(normalized.wateringIntervalDays))
+      setReviewScientific(normalized.scientificName || '')
+      setReviewSpecies(speciesLabelFromNormalized(normalized))
       setFlowStep('confirm')
     } catch (err) {
       const quiet =
@@ -245,10 +307,12 @@ export function AddPlantDrawer({
         location: form.location,
         potSize: form.potSize ?? '',
         imageUrl: form.imageUrl,
+        displayName: trimmed,
         lastWateredAtForCare:
           plantToEdit.lastWatered?.toDate?.() ?? plantToEdit.lastWatered ?? null,
         totalWaterCountForCare: plantToEdit.totalWaterCount ?? 0,
         aiCorrectedByUser,
+        _preserveFrom: plantToEdit,
       })
       onClose()
     } catch (err) {
@@ -278,38 +342,45 @@ export function AddPlantDrawer({
     await handlePrimaryCreate()
   }, [handlePrimaryCreate, handleSaveEdit, plantToEdit])
 
-  const handleUseThis = useCallback(async () => {
+  const handleConfirmSavePlant = useCallback(async () => {
     if (!aiNormalized) return
-    setSaving(true)
-    setSaveError(null)
-    try {
-      await commitCreate({
-        name: aiNormalized.displayName,
-        aiNormalized,
-        aiCorrectedByUser: false,
-        aiFallback: false,
-      })
-      onClose()
-    } catch (err) {
-      setSaveError(err.message || 'Could not save')
-    } finally {
-      setSaving(false)
-    }
-  }, [aiNormalized, commitCreate, onClose])
-
-  const handleSaveEditedName = useCallback(async () => {
     const name = reviewName.trim()
-    if (!name || !aiNormalized) return
+    if (!name) {
+      setSaveError('Add a name for this plant.')
+      return
+    }
+    const intervalNum = Math.round(Number(reviewIntervalDays))
+    if (Number.isNaN(intervalNum) || intervalNum < 2) {
+      setSaveError('Enter a watering interval of at least 2 days.')
+      return
+    }
+
+    const baseline = confirmBaselineRef.current
+    const sp = reviewSpecies.trim()
+    const sci = reviewScientific.trim()
+    const slugSp = sp ? slugFromReviewSpecies(sp) : null
+    const corrected =
+      !baseline ||
+      name !== baseline.displayName ||
+      intervalNum !== baseline.wateringIntervalDays ||
+      reviewLocation !== baseline.location ||
+      sci !== (baseline.scientificName || '') ||
+      (slugSp != null && slugSp !== baseline.detectedType)
+
     setSaving(true)
     setSaveError(null)
     try {
-      const corrected =
-        name !== String(aiNormalized.displayName || '').trim()
       await commitCreate({
         name,
+        location: reviewLocation,
         aiNormalized,
         aiCorrectedByUser: corrected,
         aiFallback: false,
+        wateringIntervalDaysOverride: intervalNum,
+        ...(sp
+          ? { detectedTypeOverride: sp, typeLabelOverride: sp }
+          : {}),
+        scientificName: sci,
       })
       onClose()
     } catch (err) {
@@ -317,7 +388,23 @@ export function AddPlantDrawer({
     } finally {
       setSaving(false)
     }
-  }, [aiNormalized, commitCreate, onClose, reviewName])
+  }, [
+    aiNormalized,
+    commitCreate,
+    onClose,
+    reviewIntervalDays,
+    reviewLocation,
+    reviewName,
+    reviewScientific,
+    reviewSpecies,
+  ])
+
+  const handleBackFromConfirm = useCallback(() => {
+    setFlowStep('form')
+    setAiNormalized(null)
+    confirmBaselineRef.current = null
+    setSaveError(null)
+  }, [])
 
   if (!open) return null
 
@@ -330,7 +417,7 @@ export function AddPlantDrawer({
       : hasPhoto
         ? saving
           ? '…'
-          : 'Analyze & save'
+          : 'Analyze photo'
         : saving
           ? 'Saving…'
           : 'Save & plan care'
@@ -373,17 +460,13 @@ export function AddPlantDrawer({
             </div>
           ) : showConfirm ? (
             <div className="add-confirm-card">
-              <p className="add-confirm-eyebrow">Quick check</p>
-              <p className="add-confirm-lead">
-                We think this is
-                <span className="add-confirm-name">
-                  {' '}
-                  {aiNormalized?.displayName}
-                </span>
+              <p className="add-confirm-eyebrow">Review plant</p>
+              <p className="add-confirm-lead add-confirm-lead--headline">
+                {identificationHeadline(aiNormalized)}
               </p>
               <p className="add-confirm-hint">{confirmExplanationLine(aiNormalized)}</p>
 
-              {confirmSubstep === 'edit' ? (
+              <div className="add-confirm-fields">
                 <label className="field field--confirm-edit">
                   <span className="field-label field-label-subtle">Name</span>
                   <input
@@ -391,9 +474,79 @@ export function AddPlantDrawer({
                     value={reviewName}
                     onChange={(e) => setReviewName(e.target.value)}
                     autoComplete="off"
+                    placeholder="Common name"
                   />
                 </label>
-              ) : null}
+                <label className="field field--confirm-edit">
+                  <span className="field-label field-label-subtle">
+                    Type / species <span className="field-optional">(optional)</span>
+                  </span>
+                  <input
+                    className="field-input field-input--soft"
+                    value={reviewSpecies}
+                    onChange={(e) => setReviewSpecies(e.target.value)}
+                    autoComplete="off"
+                    placeholder="e.g. Golden pothos"
+                  />
+                </label>
+                <label className="field field--confirm-edit">
+                  <span className="field-label field-label-subtle">
+                    Scientific name <span className="field-optional">(optional)</span>
+                  </span>
+                  <input
+                    className="field-input field-input--soft"
+                    value={reviewScientific}
+                    onChange={(e) => setReviewScientific(e.target.value)}
+                    autoComplete="off"
+                    placeholder="e.g. Epipremnum aureum"
+                  />
+                </label>
+
+                <div className="add-confirm-env">
+                  <span className="field-label field-label-subtle">Where is it?</span>
+                  <div className="loc-toggle loc-toggle--polished add-plant-loc add-confirm-loc">
+                    <button
+                      type="button"
+                      className={reviewLocation === 'indoor' ? 'is-on' : ''}
+                      onClick={() => setReviewLocation('indoor')}
+                      disabled={saving}
+                    >
+                      Indoor
+                    </button>
+                    <button
+                      type="button"
+                      className={reviewLocation === 'outdoor' ? 'is-on' : ''}
+                      onClick={() => setReviewLocation('outdoor')}
+                      disabled={saving}
+                    >
+                      Outdoor
+                    </button>
+                  </div>
+                </div>
+
+                <label className="field field--confirm-edit">
+                  <span className="field-label field-label-subtle">
+                    Water about every (days)
+                  </span>
+                  <input
+                    className="field-input field-input--soft field-input--interval"
+                    inputMode="numeric"
+                    value={reviewIntervalDays}
+                    onChange={(e) => setReviewIntervalDays(e.target.value.replace(/[^\d]/g, ''))}
+                    autoComplete="off"
+                  />
+                  <span className="field-micro">
+                    Suggested from the photo — change if you know your plant better.
+                  </span>
+                </label>
+
+                {aiNormalized?.scheduleNote ? (
+                  <p className="add-confirm-care-note muted">
+                    <span className="add-confirm-care-label">Care note: </span>
+                    {aiNormalized.scheduleNote}
+                  </p>
+                ) : null}
+              </div>
 
               {saveError && <p className="field-error">{saveError}</p>}
             </div>
@@ -575,6 +728,38 @@ export function AddPlantDrawer({
                 </section>
               ) : null}
 
+              {!plantToEdit ? (
+                <section className="add-plant-env" aria-label="Last watered">
+                  <span className="field-label field-label-photo">
+                    When was it last watered?
+                  </span>
+                  <p className="field-micro field-micro--below-label">
+                    Optional — first reminder uses this so it feels realistic.
+                  </p>
+                  <div className="loc-toggle loc-toggle--polished add-plant-loc add-plant-loc--wrap">
+                    {[
+                      { id: '', label: 'Not sure' },
+                      { id: 'today', label: 'Today' },
+                      { id: 'yesterday', label: 'Yesterday' },
+                      { id: 'few', label: '2–3 days ago' },
+                      { id: 'week', label: 'About a week ago' },
+                    ].map(({ id, label }) => (
+                      <button
+                        key={id || 'preset-none'}
+                        type="button"
+                        className={
+                          form.lastWateredPreset === id ? 'is-on' : ''
+                        }
+                        onClick={() => set({ lastWateredPreset: id })}
+                        disabled={saving}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </section>
+              ) : null}
+
               {/* Pot — last, muted */}
               {showPotSection ? (
                 <section className="field field--pot-muted field--last" aria-label="Container size">
@@ -614,49 +799,24 @@ export function AddPlantDrawer({
 
         <div className="drawer-footer drawer-footer--sticky drawer-footer--add-plant">
           {showConfirm ? (
-            confirmSubstep === 'pick' ? (
-              <>
-                <button
-                  type="button"
-                  className="btn-ghost-inline btn-footer"
-                  onClick={() => setConfirmSubstep('edit')}
-                  disabled={saving}
-                >
-                  Edit name
-                </button>
-                <button
-                  type="button"
-                  className="btn-primary btn-primary--large btn-primary--premium"
-                  onClick={handleUseThis}
-                  disabled={saving}
-                >
-                  {saving ? 'Saving…' : 'Use this'}
-                </button>
-              </>
-            ) : (
-              <>
-                <button
-                  type="button"
-                  className="btn-outline btn-footer"
-                  onClick={() => {
-                    setConfirmSubstep('pick')
-                    setReviewName(aiNormalized?.displayName || '')
-                    setSaveError(null)
-                  }}
-                  disabled={saving}
-                >
-                  Back
-                </button>
-                <button
-                  type="button"
-                  className="btn-primary btn-primary--large btn-primary--premium"
-                  onClick={handleSaveEditedName}
-                  disabled={saving || !reviewName.trim()}
-                >
-                  {saving ? 'Saving…' : 'Save'}
-                </button>
-              </>
-            )
+            <>
+              <button
+                type="button"
+                className="btn-outline btn-footer"
+                onClick={handleBackFromConfirm}
+                disabled={saving}
+              >
+                Back
+              </button>
+              <button
+                type="button"
+                className="btn-primary btn-primary--large btn-primary--premium"
+                onClick={handleConfirmSavePlant}
+                disabled={saving || !reviewName.trim()}
+              >
+                {saving ? 'Saving…' : 'Save plant'}
+              </button>
+            </>
           ) : (
             <>
               <button

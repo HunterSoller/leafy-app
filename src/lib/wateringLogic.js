@@ -66,8 +66,25 @@ function smartSortTier(nextRaw, outdoorDelayDays) {
   return 2
 }
 
-export function sortPlants(plants, getOutdoorDelayForPlant) {
+function balanceSortRank(level) {
+  if (level < 40) return 0
+  if (level < 65) return 1
+  return 2
+}
+
+export function sortPlants(plants, getOutdoorDelayForPlant, getLiveWaterLevel) {
   return [...plants].sort((a, b) => {
+    if (typeof getLiveWaterLevel === 'function') {
+      const la = getLiveWaterLevel(a)
+      const lb = getLiveWaterLevel(b)
+      if (la != null && lb != null) {
+        const rA = balanceSortRank(la)
+        const rB = balanceSortRank(lb)
+        if (rA !== rB) return rA - rB
+        if (la !== lb) return la - lb
+      }
+    }
+
     const delayA = getOutdoorDelayForPlant(a)
     const delayB = getOutdoorDelayForPlant(b)
     const nextA = a.nextWaterDue?.toDate?.() ?? a.nextWaterDue

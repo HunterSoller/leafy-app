@@ -1,10 +1,15 @@
 import { useMemo } from 'react'
 import { summarizeGroupSmart } from '../lib/smartPlantStatus'
 
-export function AssistantSummary({ plants, delayForPlant }) {
+export function AssistantSummary({
+  plants,
+  delayForPlant,
+  weatherOptionsForPlant,
+}) {
   const summary = useMemo(
-    () => summarizeGroupSmart(plants, delayForPlant),
-    [plants, delayForPlant],
+    () =>
+      summarizeGroupSmart(plants, delayForPlant, weatherOptionsForPlant),
+    [plants, delayForPlant, weatherOptionsForPlant],
   )
 
   const lines = useMemo(() => {
@@ -14,7 +19,10 @@ export function AssistantSummary({ plants, delayForPlant }) {
     if (today > 0) {
       out.push({
         key: 'today',
-        text: today === 1 ? '1 plant needs water today.' : `${today} plants need water today.`,
+        text:
+          today === 1
+            ? '1 plant needs water today.'
+            : `${today} plants need water today.`,
         emphasis: true,
       })
     } else if (soon === 0) {
@@ -36,8 +44,8 @@ export function AssistantSummary({ plants, delayForPlant }) {
         key: 'soon',
         text:
           soon === 1
-            ? 'One will need water in the next day or two.'
-            : `${soon} will need water in the next day or two.`,
+            ? 'One is worth checking in the next day or two.'
+            : `${soon} are worth checking in the next day or two.`,
         emphasis: false,
       })
     }
@@ -71,7 +79,7 @@ export function AssistantSummary({ plants, delayForPlant }) {
 
   return (
     <section className="assistant-summary" aria-label="Do I need to water?">
-      <p className="assistant-summary-kicker">Right now</p>
+      <p className="assistant-summary-kicker">At a glance</p>
       <ul className="assistant-summary-list">
         {lines.map((line) => (
           <li

@@ -3,6 +3,8 @@ export function CareInfoPanel({
   suggestedAmount,
   howToWater,
   watchFor,
+  setupDescription,
+  weatherEffectNote,
   expanded,
   onToggle,
 }) {
@@ -19,7 +21,7 @@ export function CareInfoPanel({
             {expanded ? 'Hide details' : 'View care'}
           </span>
           <span className="care-info-toggle-hint">
-            How to water, warning signs, notes
+            Setup, weather context, how to water
           </span>
         </span>
         <span className={`chevron ${expanded ? 'is-up' : ''}`} aria-hidden>
@@ -31,6 +33,32 @@ export function CareInfoPanel({
           {scheduleNote && (
             <p className="care-plan-note">{scheduleNote}</p>
           )}
+          {setupDescription ? (
+            <div className="care-row care-row--meta">
+              <span className="care-ico" aria-hidden>
+                📍
+              </span>
+              <div>
+                <div className="care-label">How this care is set up</div>
+                <div className="care-value care-value--meta">
+                  {setupDescription.replace(/^Setup:\s*/i, '')}
+                </div>
+              </div>
+            </div>
+          ) : null}
+          {weatherEffectNote ? (
+            <div className="care-row care-row--meta">
+              <span className="care-ico" aria-hidden>
+                ☁️
+              </span>
+              <div>
+                <div className="care-label">Weather</div>
+                <div className="care-value care-value--meta">
+                  {weatherEffectNote.replace(/^Weather effect:\s*/i, '')}
+                </div>
+              </div>
+            </div>
+          ) : null}
           <div className="care-row">
             <span className="care-ico" aria-hidden>
               💧

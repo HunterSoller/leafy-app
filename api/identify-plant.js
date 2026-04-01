@@ -37,6 +37,7 @@ Rules:
 Return this exact JSON shape:
 {
   "displayName": string,
+  "scientificName": string (Latin binomial if reasonably known, otherwise ""),
   "detectedType": string (short slug, e.g. "monstera" or "tomato_bed"),
   "matchKind": "specific" | "category" | "area" | "unknown",
   "sceneType": "single_plant" | "multiple_plants" | "garden_area" | "unclear",

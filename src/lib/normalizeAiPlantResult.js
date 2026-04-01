@@ -2,7 +2,7 @@ import { addCalendarDaysNY } from './wateringLogic'
 import { computeJitterDays } from './plantCareRules'
 import { POT_WATER } from './defaults'
 
-/** Auto-save when model is confident enough (product default). */
+/** Legacy threshold; photo flow always requires explicit user confirmation before save. */
 export const AUTO_SAVE_MIN_CONFIDENCE = 0.75
 
 const MATCH_KINDS = new Set(['specific', 'category', 'area', 'unknown'])
@@ -33,12 +33,43 @@ function clampInterval(v, sceneType, environment) {
   return d
 }
 
+/** Exported for client-side clamping when the user edits interval after identification. */
+export function clampWateringIntervalDays(v, sceneType, environment) {
+  return clampInterval(v, sceneType, environment)
+}
+
 function sanitizeDisplayName(s) {
   return String(s ?? '')
     .replace(/[^\w\s\-'",./&]/gi, ' ')
     .replace(/\s+/g, ' ')
     .trim()
     .slice(0, 80)
+}
+
+function sanitizeScientificName(s) {
+  return String(s ?? '')
+    .replace(/[^\w\s.\-'",()]/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 120)
+}
+
+/** Friendlier labels for generic outdoor area names from the model. */
+function polishOutdoorDisplayName(displayName, nameHint, environment) {
+  const d = sanitizeDisplayName(displayName)
+  const hint = sanitizeDisplayName(nameHint)
+  if (environment !== 'outdoor') return d
+
+  const awkward =
+    /^(outdoor garden|garden area|plants area|green plants|plants|yard|outside|backyard garden area|outdoor plants)$/i
+  if (awkward.test(d) && hint.length >= 2) {
+    if (/bed|patch|border|planter|herb|tomato|shrub|flower|front|side|back|drive/i.test(hint)) {
+      return hint
+    }
+    if (/yard|garden|patch/i.test(hint)) return hint
+    return `${hint} · garden area`
+  }
+  return d
 }
 
 function slugifyDetected(s) {
@@ -148,6 +179,7 @@ export function normalizeAiPlantResult(raw, ctx = {}) {
   if (!SCENE_TYPES.has(sceneType)) sceneType = 'unclear'
 
   let displayName = sanitizeDisplayName(r.displayName || r.commonName)
+  let scientificName = sanitizeScientificName(r.scientificName)
   let detectedType = slugifyDetected(r.detectedType || displayName || 'plant')
 
   const confidence = clamp01(r.confidence)
@@ -220,6 +252,7 @@ export function normalizeAiPlantResult(raw, ctx = {}) {
   let merged = applyAmbiguityHeuristics(
     {
       displayName,
+      scientificName,
       detectedType,
       matchKind,
       sceneType,
@@ -251,13 +284,18 @@ export function normalizeAiPlantResult(raw, ctx = {}) {
     environment,
   )
 
-  merged.typeLabel = merged.displayName
-
   const jitter = computeJitterDays(jitterKey, jitterEventIndex)
   merged.nextWateringAt = addCalendarDaysNY(
     new Date(),
     merged.wateringIntervalDays + jitter,
   )
+
+  merged.displayName = polishOutdoorDisplayName(
+    merged.displayName,
+    nameHint,
+    environment,
+  )
+  merged.typeLabel = merged.displayName
 
   return merged
 }
@@ -268,28 +306,38 @@ export function normalizeNameHintForRules(nameHint) {
 }
 
 /**
- * High-confidence photo flow: save immediately, no confirm sheet.
- * Rule: confidence ≥ AUTO_SAVE_MIN_CONFIDENCE and (single plant OR model marked specific).
+ * Photo identification never auto-saves — user must confirm on the review step.
  */
-export function shouldAutoSaveAfterAi(n) {
-  if (!n || n.fallbackUsed) return false
-  if (n.confidence < AUTO_SAVE_MIN_CONFIDENCE) return false
-  if (n.sceneType !== 'single_plant' && n.matchKind !== 'specific') return false
-  return true
+export function shouldAutoSaveAfterAi(_n) {
+  return false
 }
 
 export function needsAiReviewStep(n) {
-  return !shouldAutoSaveAfterAi(n)
+  return Boolean(n && !n.fallbackUsed)
 }
 
-/** One calm line for the low-confidence confirm panel. */
+/**
+ * Short confidence-aware headline for the review step (“Likely …”, “Possibly …”, etc.).
+ */
+export function identificationHeadline(n) {
+  if (!n) return ''
+  const name = String(n.displayName || '').trim() || 'this plant'
+  const c = clamp01(n.confidence)
+  if (c >= 0.72) return `Likely ${name}`
+  if (c >= 0.45) return `Possibly ${name}`
+  return `Not fully sure — please confirm`
+}
+
+/** Context + trust note for the review panel. */
 export function confirmExplanationLine(n) {
   if (!n) return ''
+  const trust =
+    'Plant identification is an estimate. Please confirm details before saving.'
   if (n.sceneType === 'garden_area' || n.sceneType === 'multiple_plants') {
-    return 'We grouped this as one outdoor space — a single card with gentle guidance.'
+    return `We grouped this as one outdoor space — a single card with gentle guidance. ${trust}`
   }
   if (n.sceneType === 'unclear' || n.confidence < 0.55) {
-    return 'The photo left some room for interpretation — tweak the name anytime after saving.'
+    return `The photo left some room for interpretation — edit anything that looks off. ${trust}`
   }
-  return 'Almost there — tap below if this looks right, or adjust the name.'
+  return `Review the suggestions below and adjust if needed. ${trust}`
 }

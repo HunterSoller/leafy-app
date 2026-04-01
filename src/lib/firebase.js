@@ -12,8 +12,13 @@ import {
   serverTimestamp,
   Timestamp,
   increment,
+  setDoc,
 } from 'firebase/firestore'
 import { DEFAULT_GROUP_ID, normalizeStoredGroupId } from './group'
+import {
+  readLocalGroupSettings,
+  writeLocalGroupSettings,
+} from './groupLocalSettings'
 import { getPlantIntervalDays, computeJitterDays } from './plantCareRules'
 
 function getConfig() {
@@ -132,6 +137,77 @@ export function subscribeWateringLog(groupId, onData, onError) {
   )
 }
 
+/**
+ * Per-group settings (e.g. weather location). Document id matches `groupId` from the URL / plants.
+ * Fields: location_lat, location_lng, location_label, location_source ('browser' | 'manual')
+ */
+export function subscribeGroupSettings(groupId, onData, onError) {
+  const id = normalizeStoredGroupId(groupId)
+  const db = getDb()
+  if (!db) {
+    try {
+      onData(readLocalGroupSettings(id))
+    } catch (e) {
+      onError?.(e)
+    }
+    return () => {}
+  }
+
+  const ref = doc(db, 'groups', id)
+  return onSnapshot(
+    ref,
+    (snap) => {
+      if (!snap.exists()) {
+        onData(null)
+        return
+      }
+      onData(snap.data())
+    },
+    (err) => {
+      onError?.(err)
+      onData(readLocalGroupSettings(id))
+    },
+  )
+}
+
+/**
+ * @param {string} groupId
+ * @param {{ location_lat: number, location_lng: number, location_label?: string, location_source?: 'browser' | 'manual' }} fields
+ */
+export async function saveGroupLocation(groupId, fields) {
+  const id = normalizeStoredGroupId(groupId)
+  const lat = Number(fields.location_lat)
+  const lng = Number(fields.location_lng)
+  if (Number.isNaN(lat) || Number.isNaN(lng)) {
+    throw new Error('Invalid coordinates')
+  }
+  const payload = {
+    location_lat: lat,
+    location_lng: lng,
+    location_label: String(fields.location_label ?? '').slice(0, 200),
+    location_source: fields.location_source === 'browser' ? 'browser' : 'manual',
+  }
+
+  const db = getDb()
+  if (!db) {
+    writeLocalGroupSettings(id, payload)
+    return
+  }
+
+  await setDoc(doc(db, 'groups', id), payload, { merge: true })
+}
+
+export async function persistPlantWaterBalance(id, patch) {
+  const db = getDb()
+  if (!db) throw new Error('Firebase is not configured')
+  const ref = doc(db, 'plants', id)
+  const clean = { ...patch }
+  for (const k of Object.keys(clean)) {
+    if (clean[k] === undefined) delete clean[k]
+  }
+  await updateDoc(ref, clean)
+}
+
 export async function createPlant(payload) {
   const db = getDb()
   if (!db) throw new Error('Firebase is not configured')
@@ -143,6 +219,11 @@ export async function createPlant(payload) {
   const interval = getPlantIntervalDays(payload)
   const nextDue =
     payload.nextWaterDue ?? addDaysTimestamp(new Date(), interval)
+
+  const initHydration =
+    payload.hydrationScore ??
+    payload.waterLevel ??
+    100
 
   await addDoc(collection(db, 'plants'), {
     groupId,
@@ -173,8 +254,22 @@ export async function createPlant(payload) {
     totalWaterCount: payload.totalWaterCount ?? 0,
     lastWatered: payload.lastWatered ?? null,
     nextWaterDue: nextDue,
+    hydrationScore: initHydration,
+    hydrationCalculatedAt: now,
+    weatherAdjustmentNote: payload.weatherAdjustmentNote ?? null,
+    waterLevel: initHydration,
+    waterBalanceUpdatedAt: now,
+    rainMmBalanceSnapshot:
+      typeof payload.rainMmBalanceSnapshot === 'number'
+        ? payload.rainMmBalanceSnapshot
+        : 0,
+    lastRainAt: payload.lastRainAt ?? null,
+    lastRainAmount: payload.lastRainAmount ?? null,
+    rainContribution: payload.rainContribution ?? null,
     notes: payload.notes ?? '',
     createdAt: now,
+    scientificName: payload.scientificName ?? '',
+    aiIdentifiedScientificName: payload.aiIdentifiedScientificName ?? null,
     detectedType: payload.detectedType ?? '',
     matchKind: payload.matchKind ?? null,
     sceneType: payload.sceneType ?? null,
@@ -219,7 +314,7 @@ export async function logWatering(plantId, weatherDelayApplied, groupId) {
   })
 }
 
-export async function recordWatering(plant, outdoorDelayDays) {
+export async function recordWatering(plant, outdoorDelayDays, options = {}) {
   const db = getDb()
   if (!db) throw new Error('Firebase is not configured')
   const now = new Date()
@@ -231,10 +326,19 @@ export async function recordWatering(plant, outdoorDelayDays) {
   const ref = doc(db, 'plants', plant.id)
   const groupId = normalizeStoredGroupId(plant.groupId)
 
+  const rainSnap =
+    typeof options.rainMmSnapshot === 'number' ? options.rainMmSnapshot : 0
+
   await updateDoc(ref, {
     lastWatered: Timestamp.fromDate(now),
     nextWaterDue: nextDue,
     totalWaterCount: increment(1),
+    hydrationScore: 98,
+    hydrationCalculatedAt: Timestamp.fromDate(now),
+    waterLevel: 98,
+    waterBalanceUpdatedAt: Timestamp.fromDate(now),
+    rainMmBalanceSnapshot: rainSnap,
+    weatherAdjustmentNote: null,
   })
   await logWatering(
     plant.id,

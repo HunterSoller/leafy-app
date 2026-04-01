@@ -280,9 +280,9 @@ export function assistantNextWateringPhrase(nextWaterDueRaw, outdoorDelayDays = 
   const now = new Date()
   const eff = effectiveDueDate(raw, outdoorDelayDays)
   const diff = calendarDaysDifferenceNY(now, eff)
-  if (diff <= 0) return 'Water today'
-  if (diff === 1) return 'Water tomorrow'
-  return `Water in ${diff} days`
+  if (diff <= 0) return 'Likely needs water today'
+  if (diff === 1) return 'Next watering tomorrow'
+  return `Next in ${diff} days`
 }
 
 /** @param {object} plant */

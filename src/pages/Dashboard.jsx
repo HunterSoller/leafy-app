@@ -2,7 +2,17 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { usePlants } from '../hooks/usePlants'
 import { useWeather } from '../hooks/useWeather'
 import { useGroupId } from '../hooks/useGroupId'
-import { getGroupSpaceLabel } from '../lib/group'
+import { useGroupSettings } from '../hooks/useGroupSettings'
+import { getGroupSpaceLabel, DEFAULT_GROUP_ID } from '../lib/group'
+import {
+  isGroupLocationPromptSkipped,
+  setGroupLocationPromptSkipped,
+} from '../lib/groupLocalSettings'
+import { persistPlantWaterBalance, timestampFromDate } from '../lib/firebase'
+import {
+  computeSyncedHydration,
+  hydrationNeedsPersist,
+} from '../lib/hydrationModel'
 import { sortPlants } from '../lib/wateringLogic'
 import {
   groupPlantsByTodayFocus,
@@ -13,21 +23,40 @@ import { AddPlantDrawer } from '../components/AddPlantDrawer'
 import { WeatherBanner } from '../components/WeatherBanner'
 import { EmptyState } from '../components/EmptyState'
 import { ConfirmDialog } from '../components/ConfirmDialog'
-import { AssistantSummary } from '../components/AssistantSummary'
+import { GroupDashboardSummary } from '../components/GroupDashboardSummary'
+import { GroupLocationModal } from '../components/GroupLocationModal'
+import { GroupWeatherPanel } from '../components/GroupWeatherPanel'
+import { RecentActivitySection } from '../components/RecentActivitySection'
 
-function PlantSection({ title, children, sectionRef, className = '' }) {
+function PlantSection({ title, count, children, sectionRef, className = '' }) {
   return (
     <section
       className={`plant-section ${className}`.trim()}
       ref={sectionRef}
     >
-      <h2 className="plant-section-title">{title}</h2>
+      <h2 className="plant-section-title">
+        <span className="plant-section-title-text">{title}</span>
+        {count != null ? (
+          <span className="plant-section-count" aria-hidden>
+            {count}
+          </span>
+        ) : null}
+      </h2>
       {children}
     </section>
   )
 }
 
-function renderPlantList(plants, startIndex, delayForPlant, waterPlant, openEdit, handleDelete, flashPlantId) {
+function renderPlantList(
+  plants,
+  startIndex,
+  delayForPlant,
+  weatherOptionsForPlant,
+  waterPlant,
+  openEdit,
+  handleDelete,
+  flashPlantId,
+) {
   return (
     <ul className="plant-list plant-list--section">
       {plants.map((plant, i) => (
@@ -36,7 +65,8 @@ function renderPlantList(plants, startIndex, delayForPlant, waterPlant, openEdit
             plant={plant}
             index={startIndex + i}
             outdoorDelayDays={delayForPlant(plant)}
-            onWater={() => waterPlant(plant, delayForPlant(plant))}
+            weatherOptions={weatherOptionsForPlant(plant)}
+            onWater={() => waterPlant(plant)}
             onEdit={openEdit}
             onDelete={handleDelete}
             waterFlash={flashPlantId === plant.id}
@@ -61,7 +91,22 @@ export function Dashboard() {
     waterPlant,
   } = usePlants()
 
-  const { bannerMessage, delayForPlant } = useWeather()
+  const {
+    settings: groupSettings,
+    loading: groupSettingsLoading,
+    hasSavedLocation,
+    saveLocation: saveGroupLocationFields,
+  } = useGroupSettings()
+
+  const isDefaultGroup = groupId === DEFAULT_GROUP_ID
+
+  const {
+    bannerMessage,
+    delayForPlant,
+    weatherOptionsForPlant: baseWeatherOptions,
+    weatherContext,
+    error: weatherFetchError,
+  } = useWeather(groupId, groupSettings, groupSettingsLoading)
 
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [plantToEdit, setPlantToEdit] = useState(null)
@@ -71,21 +116,73 @@ export function Dashboard() {
   const [flashPlantId, setFlashPlantId] = useState(null)
   const [allSetToday, setAllSetToday] = useState(false)
   const [carePlanToast, setCarePlanToast] = useState(null)
+  const [groupLocModalOpen, setGroupLocModalOpen] = useState(false)
 
   const urgentSectionRef = useRef(null)
   const didAutoScrollRef = useRef(false)
   const prevUrgentCountRef = useRef(null)
   const allSetToastTimersRef = useRef({ show: null, hide: null })
 
+  const balanceById = useMemo(() => {
+    const m = new Map()
+    const now = new Date()
+    for (const p of plants) {
+      m.set(p.id, computeSyncedHydration(p, weatherContext, now))
+    }
+    return m
+  }, [plants, weatherContext])
+
+  const weatherOptionsForPlant = useCallback(
+    (plant) => {
+      const meta = balanceById.get(plant.id)
+      return {
+        ...baseWeatherOptions(plant),
+        liveHydrationScore: meta?.hydrationScore,
+        liveWaterLevel: meta?.hydrationScore,
+        balanceMeta: meta,
+      }
+    },
+    [baseWeatherOptions, balanceById],
+  )
+
   const sorted = useMemo(
-    () => sortPlants(plants, delayForPlant),
-    [plants, delayForPlant],
+    () =>
+      sortPlants(
+        plants,
+        delayForPlant,
+        (pl) => balanceById.get(pl.id)?.hydrationScore,
+      ),
+    [plants, delayForPlant, balanceById],
   )
 
   const grouped = useMemo(
-    () => groupPlantsByTodayFocus(sorted, delayForPlant),
-    [sorted, delayForPlant],
+    () =>
+      groupPlantsByTodayFocus(sorted, delayForPlant, weatherOptionsForPlant),
+    [sorted, delayForPlant, weatherOptionsForPlant],
   )
+
+  useEffect(() => {
+    if (!configured || !plants.length) return
+    const now = new Date()
+    for (const p of plants) {
+      const next = computeSyncedHydration(p, weatherContext, now)
+      if (!hydrationNeedsPersist(p, next)) continue
+      void persistPlantWaterBalance(p.id, {
+        hydrationScore: next.hydrationScore,
+        hydrationCalculatedAt: timestampFromDate(next.hydrationCalculatedAt),
+        waterLevel: next.hydrationScore,
+        rainMmBalanceSnapshot: next.rainMmBalanceSnapshot,
+        waterBalanceUpdatedAt: timestampFromDate(next.hydrationCalculatedAt),
+        nextWaterDue: timestampFromDate(next.nextWaterDue),
+        lastRainAmount: next.lastRainAmount,
+        rainContribution: next.rainContribution,
+        weatherAdjustmentNote: next.weatherAdjustmentNote ?? null,
+        ...(next.lastRainAt instanceof Date
+          ? { lastRainAt: timestampFromDate(next.lastRainAt) }
+          : {}),
+      }).catch(() => {})
+    }
+  }, [configured, plants, weatherContext])
 
   const addPlantAndMaybeCelebrate = useCallback(
     async (payload) => {
@@ -114,6 +211,14 @@ export function Dashboard() {
   }, [groupId])
 
   useEffect(() => {
+    if (groupSettingsLoading) return
+    if (isDefaultGroup) return
+    if (hasSavedLocation) return
+    if (isGroupLocationPromptSkipped(groupId)) return
+    setGroupLocModalOpen(true)
+  }, [groupSettingsLoading, isDefaultGroup, hasSavedLocation, groupId])
+
+  useEffect(() => {
     if (loading || didAutoScrollRef.current || grouped.today.length === 0) {
       return
     }
@@ -127,7 +232,11 @@ export function Dashboard() {
   }, [loading, grouped.today.length, plants.length])
 
   useEffect(() => {
-    const s = summarizeGroupSmart(plants, delayForPlant)
+    const s = summarizeGroupSmart(
+      plants,
+      delayForPlant,
+      weatherOptionsForPlant,
+    )
     if (prevUrgentCountRef.current === null) {
       prevUrgentCountRef.current = s.today
       return undefined
@@ -149,15 +258,18 @@ export function Dashboard() {
       if (hide) window.clearTimeout(hide)
       allSetToastTimersRef.current = { show: null, hide: null }
     }
-  }, [plants, delayForPlant])
+  }, [plants, delayForPlant, weatherOptionsForPlant])
 
   const handleWaterPlant = useCallback(
     async (plant) => {
       setFlashPlantId(plant.id)
       window.setTimeout(() => setFlashPlantId(null), 480)
-      await waterPlant(plant, delayForPlant(plant))
+      await waterPlant(plant, {
+        outdoorDelayDays: delayForPlant(plant),
+        rainMmSnapshot: weatherContext.mmCombined48h,
+      })
     },
-    [waterPlant, delayForPlant],
+    [waterPlant, delayForPlant, weatherContext.mmCombined48h],
   )
 
   const openAdd = useCallback(() => {
@@ -175,9 +287,23 @@ export function Dashboard() {
     setPlantToEdit(null)
   }, [])
 
-  const onPhotoPlanReady = useCallback((displayName) => {
-    const t = displayName?.trim()
-    setCarePlanToast(t || null)
+  const onPhotoPlanReady = useCallback((info) => {
+    if (info == null) {
+      setCarePlanToast(null)
+      return
+    }
+    const name =
+      typeof info === 'string'
+        ? info.trim()
+        : String(info.displayName || '').trim()
+    setCarePlanToast(
+      name
+        ? {
+            headline: `Care plan ready for ${name}`,
+            subline: 'Added to this space',
+          }
+        : { headline: 'Care plan ready', subline: 'Added to this space' },
+    )
   }, [])
 
   useEffect(() => {
@@ -200,28 +326,42 @@ export function Dashboard() {
 
   const idxSoon = grouped.today.length
   const idxGood = grouped.today.length + grouped.soon.length
+  const forecastActive = weatherContext?.adjustmentsActive === true
 
   return (
     <div className="app-shell">
       <header className="app-header">
-        <div className="brand-block">
-          <div className="brand">
-            <span className="brand-leaf" aria-hidden>
-              🌿
-            </span>
-            <span className="brand-name">Leafy</span>
+        <div className="app-header-main">
+          <div className="app-header-brand-row">
+            <div className="brand-block">
+              <div className="brand">
+                <span className="brand-leaf" aria-hidden>
+                  🌿
+                </span>
+                <span className="brand-name">Leafy</span>
+              </div>
+              <p className="brand-tagline">Calm care for your plants</p>
+            </div>
+            <button
+              type="button"
+              className="btn-header-add"
+              onClick={openAdd}
+              style={{ touchAction: 'manipulation' }}
+            >
+              Add plant
+            </button>
           </div>
-          <p className="brand-tagline">Calm care for your plants</p>
-          <p className="group-context">{spaceLabel}</p>
+          <p className="group-eyebrow">This space</p>
+          <h1 className="group-title">{spaceLabel}</h1>
+          <GroupWeatherPanel
+            isDefaultGroup={isDefaultGroup}
+            hasSavedLocation={hasSavedLocation}
+            locationLabel={groupSettings?.location_label}
+            forecastActive={forecastActive}
+            weatherFetchError={Boolean(weatherFetchError)}
+            onUpdateLocation={() => setGroupLocModalOpen(true)}
+          />
         </div>
-        <button
-          type="button"
-          className="btn-header-add"
-          onClick={openAdd}
-          style={{ touchAction: 'manipulation' }}
-        >
-          Add plant
-        </button>
       </header>
 
       {showWeather && (
@@ -229,6 +369,15 @@ export function Dashboard() {
           message={bannerMessage}
           onDismiss={() => setWeatherDismissed(true)}
         />
+      )}
+
+      {weatherFetchError && hasSavedLocation && (
+        <p className="weather-fetch-hint" role="status">
+          <span className="weather-fetch-hint-icon" aria-hidden>
+            ☁️
+          </span>
+          Forecast couldn’t load — your watering rhythm is unchanged.
+        </p>
       )}
 
       {firstPlantTip && (
@@ -256,16 +405,28 @@ export function Dashboard() {
 
       {carePlanToast ? (
         <div className="care-plan-toast" role="status">
-          Care plan ready for{' '}
-          <span className="care-plan-toast-name">{carePlanToast}</span>
+          <p className="care-plan-toast-headline">{carePlanToast.headline}</p>
+          {carePlanToast.subline ? (
+            <p className="care-plan-toast-subline">{carePlanToast.subline}</p>
+          ) : null}
         </div>
       ) : null}
 
       <main className="app-main">
         {loading && (
-          <p className="loading-simple muted center" role="status">
-            Checking your plants...
-          </p>
+          <div className="dashboard-loading" role="status" aria-busy="true">
+            <div className="loading-dots" aria-hidden>
+              <span />
+              <span />
+              <span />
+            </div>
+            <p className="loading-text">Gathering your plants…</p>
+            <div className="dashboard-skeleton" aria-hidden>
+              <div className="skeleton-line skeleton-line--wide" />
+              <div className="skeleton-line skeleton-line--card" />
+              <div className="skeleton-line skeleton-line--card" />
+            </div>
+          </div>
         )}
 
         {!loading && plants.length === 0 && (
@@ -274,12 +435,21 @@ export function Dashboard() {
 
         {!loading && plants.length > 0 && (
           <>
-            <AssistantSummary plants={plants} delayForPlant={delayForPlant} />
+            <GroupDashboardSummary
+              plants={plants}
+              delayForPlant={delayForPlant}
+              weatherOptionsForPlant={weatherOptionsForPlant}
+              locationLabel={groupSettings?.location_label}
+              hasSavedLocation={hasSavedLocation}
+              forecastActive={forecastActive}
+              weatherFetchError={Boolean(weatherFetchError)}
+            />
 
             <div className="plant-sections">
               {grouped.today.length > 0 && (
                 <PlantSection
-                  title="Needs water today"
+                  title="Needs water now"
+                  count={grouped.today.length}
                   sectionRef={urgentSectionRef}
                   className="plant-section--urgent"
                 >
@@ -287,6 +457,7 @@ export function Dashboard() {
                     grouped.today,
                     0,
                     delayForPlant,
+                    weatherOptionsForPlant,
                     handleWaterPlant,
                     openEdit,
                     handleDelete,
@@ -295,16 +466,24 @@ export function Dashboard() {
                 </PlantSection>
               )}
 
-              {grouped.today.length === 0 && grouped.soon.length > 0 && (
-                <p className="plant-nothing-urgent">Nothing urgent today</p>
+              {grouped.today.length === 0 && (
+                <div
+                  className="plant-nothing-urgent plant-nothing-urgent--positive"
+                  role="status"
+                >
+                  {grouped.soon.length > 0
+                    ? 'Nothing needs water right now — check “Due soon” next.'
+                    : 'Nothing urgent — every plant looks comfortable for now.'}
+                </div>
               )}
 
               {grouped.soon.length > 0 && (
-                <PlantSection title="Up next">
+                <PlantSection title="Due soon" count={grouped.soon.length}>
                   {renderPlantList(
                     grouped.soon,
                     idxSoon,
                     delayForPlant,
+                    weatherOptionsForPlant,
                     handleWaterPlant,
                     openEdit,
                     handleDelete,
@@ -314,11 +493,12 @@ export function Dashboard() {
               )}
 
               {grouped.good.length > 0 && (
-                <PlantSection title="All good">
+                <PlantSection title="Okay for now" count={grouped.good.length}>
                   {renderPlantList(
                     grouped.good,
                     idxGood,
                     delayForPlant,
+                    weatherOptionsForPlant,
                     handleWaterPlant,
                     openEdit,
                     handleDelete,
@@ -327,6 +507,8 @@ export function Dashboard() {
                 </PlantSection>
               )}
             </div>
+
+            <RecentActivitySection plants={plants} />
           </>
         )}
       </main>
@@ -351,6 +533,15 @@ export function Dashboard() {
         confirmLabel="Delete"
         onConfirm={confirmDeletePlant}
         onCancel={() => setConfirmDelete(null)}
+      />
+
+      <GroupLocationModal
+        open={groupLocModalOpen}
+        onClose={() => setGroupLocModalOpen(false)}
+        groupLabel={spaceLabel.replace(/\s+plants$/i, '').trim() || spaceLabel}
+        isDefaultGroup={isDefaultGroup}
+        saveLocation={saveGroupLocationFields}
+        onSkipNotNow={() => setGroupLocationPromptSkipped(groupId, true)}
       />
     </div>
   )

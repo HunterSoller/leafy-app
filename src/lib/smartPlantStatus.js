@@ -1,74 +1,187 @@
 import { getWateringStatus, daysUntilDueCalendar } from './wateringLogic'
+import {
+  getSmartHydrationStatus,
+  formatManualWaterSummary,
+  formatWeatherAdjustmentSummary,
+} from './hydrationModel'
 
 /**
  * @typedef {'needs_water_today' | 'due_soon' | 'on_track'} SmartTier
  */
 
 /**
- * @returns {{
- *   tier: SmartTier,
- *   headline: string,
- *   subline: string | null,
- *   daysUntil: number | null,
- *   overdueDays: number,
- *   nextInDays: number | null,
- * }}
+ * @param {object} [options]
+ * @param {{ location?: string } | null} [options.plant]
+ * @param {'none' | 'light' | 'moderate' | 'heavy'} [options.rainTier='none']
+ * @param {number} [options.liveHydrationScore]
+ * @param {number} [options.liveWaterLevel] legacy alias for liveHydrationScore
+ * @param {object} [options.balanceMeta]
+ * @param {object} [options.weatherContext]
  */
-export function getSmartPlantStatus(nextWaterDueRaw, outdoorDelayDays = 0) {
+export function getSmartPlantStatus(
+  nextWaterDueRaw,
+  outdoorDelayDays = 0,
+  options = {},
+) {
+  const {
+    plant = null,
+    rainTier = 'none',
+    liveHydrationScore,
+    liveWaterLevel,
+    balanceMeta = null,
+    weatherContext = null,
+  } = options
+
+  const hydrationLive =
+    typeof liveHydrationScore === 'number'
+      ? liveHydrationScore
+      : typeof liveWaterLevel === 'number'
+        ? liveWaterLevel
+        : null
+
+  if (hydrationLive != null) {
+    return getSmartHydrationStatus(hydrationLive, plant, {
+      weather: weatherContext ?? {},
+      adjustmentsActive: weatherContext?.adjustmentsActive === true,
+      nextWaterDue: balanceMeta?.nextWaterDue,
+      rainJustCredited: balanceMeta?.rainJustCredited,
+      lastRainAmountMm: balanceMeta?.lastRainAmount,
+    })
+  }
+
   const raw = nextWaterDueRaw?.toDate?.() ?? nextWaterDueRaw
 
   if (!raw) {
     return {
       tier: 'on_track',
       headline: 'All good for now',
-      subline: 'Add a schedule by saving this plant',
+      reasonLine: 'Add a schedule by saving this plant.',
+      checkSoilHint: null,
+      subline: 'Add a schedule by saving this plant.',
       daysUntil: null,
       overdueDays: 0,
       nextInDays: null,
+      rainChipLabel: null,
+      manualWaterLine: formatManualWaterSummary(plant),
+      weatherAdjustmentLine: formatWeatherAdjustmentSummary(plant, {
+        adjustmentsActive: weatherContext?.adjustmentsActive === true,
+        weather: weatherContext,
+      }),
     }
   }
 
   const daysUntil = daysUntilDueCalendar(raw, outdoorDelayDays)
+  const daysNoShift =
+    plant?.location === 'outdoor'
+      ? daysUntilDueCalendar(raw, 0)
+      : daysUntil
+
   const legacy = getWateringStatus(raw, outdoorDelayDays)
 
+  const isOutdoor = plant?.location === 'outdoor'
+  const forecastOn = weatherContext?.adjustmentsActive === true
+  const meaningfulRain =
+    forecastOn &&
+    isOutdoor &&
+    (rainTier === 'moderate' || rainTier === 'heavy')
+
+  /** Would have been due or overdue without weather shift; rain eased the calendar. */
+  const rainEasedSchedule =
+    meaningfulRain &&
+    daysNoShift != null &&
+    daysUntil != null &&
+    daysNoShift <= 0 &&
+    daysUntil >= 1
+
+  const rainPartial =
+    meaningfulRain &&
+    rainTier === 'moderate' &&
+    daysNoShift != null &&
+    daysUntil != null &&
+    daysNoShift >= 1 &&
+    daysUntil > daysNoShift
+
+  let tier
+  let headline
+  let subline = null
+  let overdueDays = 0
+  let rainChipLabel = null
+
+  const applyRainEasedCopy = () => {
+    if (!rainEasedSchedule) return
+    const again = `Check again in ${daysUntil} day${daysUntil === 1 ? '' : 's'}`
+    if (rainTier === 'heavy') {
+      headline = again
+      subline = 'Heavy rain helped recently.'
+      rainChipLabel = '🌧️ Rain helped'
+    } else {
+      headline = again
+      subline = 'Rain gave the soil a boost.'
+      rainChipLabel = '🌧️ Rain helped'
+    }
+  }
+
   if (legacy === 'overdue' || legacy === 'due_today') {
-    const overdueDays = daysUntil !== null && daysUntil < 0 ? -daysUntil : 0
-    return {
-      tier: 'needs_water_today',
-      headline: 'Water today',
-      subline:
-        overdueDays > 0 ? 'A bit overdue — still okay' : null,
-      daysUntil,
-      overdueDays,
-      nextInDays: daysUntil,
+    tier = 'needs_water_today'
+    overdueDays = daysUntil !== null && daysUntil < 0 ? -daysUntil : 0
+
+    if (overdueDays > 0) {
+      headline = 'Needs water today'
+      subline = 'Running a bit behind — check the soil.'
+    } else {
+      headline = 'Needs water today'
+      subline = isOutdoor
+        ? 'Warm weather may have dried the soil faster.'
+        : 'Time for a check and a drink if it’s dry.'
+    }
+  } else if (daysUntil !== null && daysUntil >= 1 && daysUntil <= 2) {
+    tier = 'due_soon'
+    applyRainEasedCopy()
+    if (!rainEasedSchedule) {
+      headline =
+        daysUntil === 1 ? 'Water tomorrow' : 'Check again in 2 days'
+      subline = rainPartial
+        ? 'Rain helped — you still have a little time.'
+        : daysUntil === 1
+          ? 'Still holding some moisture.'
+          : 'Peek at the soil before the weekend.'
+      if (rainPartial) rainChipLabel = '🌧️ Rain helped'
+    }
+  } else {
+    tier = 'on_track'
+    headline =
+      daysUntil !== null && daysUntil > 2
+        ? `Check again in ${daysUntil} days`
+        : 'All good for now'
+
+    if (rainEasedSchedule) {
+      applyRainEasedCopy()
+    } else {
+      subline = rainPartial
+        ? 'Rain helped — you have time before the next water.'
+        : daysUntil != null && daysUntil > 2
+          ? 'Rhythm looks steady for now.'
+          : 'Still holding moisture.'
+      if (rainPartial) rainChipLabel = '🌧️ Rain helped'
     }
   }
 
-  if (daysUntil !== null && daysUntil >= 1 && daysUntil <= 2) {
-    const headline =
-      daysUntil === 1 ? 'Water tomorrow' : 'Water in 2 days'
-    return {
-      tier: 'due_soon',
-      headline,
-      subline: null,
-      daysUntil,
-      overdueDays: 0,
-      nextInDays: daysUntil,
-    }
-  }
-
-  const headline =
-    daysUntil !== null && daysUntil > 2
-      ? `Water in ${daysUntil} days`
-      : 'All good for now'
-
+  const reasonLine = subline
   return {
-    tier: 'on_track',
+    tier,
     headline,
-    subline: null,
+    reasonLine,
+    checkSoilHint: null,
+    subline,
     daysUntil,
-    overdueDays: 0,
+    overdueDays,
     nextInDays: daysUntil,
+    rainChipLabel,
+    manualWaterLine: formatManualWaterSummary(plant),
+    weatherAdjustmentLine: formatWeatherAdjustmentSummary(plant, {
+      adjustmentsActive: forecastOn,
+      weather: weatherContext,
+    }),
   }
 }
 
@@ -79,8 +192,20 @@ export function getSortTierRank(tier) {
   return 2
 }
 
-/** Split an already-sorted list into today / soon / calm buckets (order preserved). */
-export function groupPlantsByTodayFocus(sortedPlants, delayForPlant) {
+/**
+ * @param {((plant: object) => object) | undefined} weatherOptionsForPlant
+ *        Return value merged into getSmartPlantStatus options (e.g. rainTier).
+ */
+export function groupPlantsByTodayFocus(
+  sortedPlants,
+  delayForPlant,
+  weatherOptionsForPlant,
+) {
+  const optFn =
+    typeof weatherOptionsForPlant === 'function'
+      ? weatherOptionsForPlant
+      : () => ({})
+
   const today = []
   const soon = []
   const good = []
@@ -88,7 +213,7 @@ export function groupPlantsByTodayFocus(sortedPlants, delayForPlant) {
   for (const p of sortedPlants) {
     const delay = delayForPlant(p)
     const next = p.nextWaterDue?.toDate?.() ?? p.nextWaterDue
-    const { tier } = getSmartPlantStatus(next, delay)
+    const { tier } = getSmartPlantStatus(next, delay, optFn(p))
     if (tier === 'needs_water_today') today.push(p)
     else if (tier === 'due_soon') soon.push(p)
     else good.push(p)
@@ -108,7 +233,16 @@ export function softPersonaLine(tier, nextInDays, plantId) {
   return 'No action needed yet.'
 }
 
-export function summarizeGroupSmart(plants, delayForPlant) {
+export function summarizeGroupSmart(
+  plants,
+  delayForPlant,
+  weatherOptionsForPlant,
+) {
+  const optFn =
+    typeof weatherOptionsForPlant === 'function'
+      ? weatherOptionsForPlant
+      : () => ({})
+
   let today = 0
   let soon = 0
   let onTrack = 0
@@ -116,11 +250,7 @@ export function summarizeGroupSmart(plants, delayForPlant) {
   for (const p of plants) {
     const delay = delayForPlant(p)
     const next = p.nextWaterDue?.toDate?.() ?? p.nextWaterDue
-    if (!next) {
-      onTrack += 1
-      continue
-    }
-    const { tier } = getSmartPlantStatus(next, delay)
+    const { tier } = getSmartPlantStatus(next, delay, optFn(p))
     if (tier === 'needs_water_today') today += 1
     else if (tier === 'due_soon') soon += 1
     else onTrack += 1

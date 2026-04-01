@@ -1,21 +1,23 @@
 export function EmptyState({ onAdd, firebaseReady }) {
   return (
-    <div className="empty-state empty-state--polished">
+    <div className="empty-state empty-state--polished empty-state-card">
       <div className="empty-visual" aria-hidden>
         <span className="empty-visual-ring" />
         <span className="empty-visual-emoji">🌱</span>
       </div>
-      <h2 className="empty-title">No plants in this space yet</h2>
+      <h2 className="empty-title">This space is ready for plants</h2>
       <p className="empty-sub">
-        Add your first plant here and Leafy will take care of the schedule.
+        Snap a photo or name a plant — Leafy builds a calm care plan. Works for
+        one pot, a planter, or a whole bed. Tap your tag anytime to jump back.
       </p>
       {!firebaseReady && (
         <p className="empty-hint">
-          Tip: add Firebase keys in <code>.env</code> so your list syncs everywhere.
+          To sync this list across devices, add your Firebase keys in{' '}
+          <code>.env</code> when you’re ready.
         </p>
       )}
       <button type="button" className="btn-primary-empty" onClick={onAdd}>
-        Add a plant
+        Add your first plant
       </button>
     </div>
   )
