@@ -25,6 +25,7 @@ import { EmptyState } from '../components/EmptyState'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { GroupDashboardSummary } from '../components/GroupDashboardSummary'
 import { GroupLocationModal } from '../components/GroupLocationModal'
+import { GroupWelcomeScreen } from '../components/GroupWelcomeScreen'
 import { GroupWeatherPanel } from '../components/GroupWeatherPanel'
 import { RecentActivitySection } from '../components/RecentActivitySection'
 
@@ -117,6 +118,8 @@ export function Dashboard() {
   const [allSetToday, setAllSetToday] = useState(false)
   const [carePlanToast, setCarePlanToast] = useState(null)
   const [groupLocModalOpen, setGroupLocModalOpen] = useState(false)
+  const [welcomePhase, setWelcomePhase] = useState(null)
+  const [dashboardReveal, setDashboardReveal] = useState(false)
 
   const urgentSectionRef = useRef(null)
   const didAutoScrollRef = useRef(false)
@@ -211,12 +214,39 @@ export function Dashboard() {
   }, [groupId])
 
   useEffect(() => {
-    if (groupSettingsLoading) return
-    if (isDefaultGroup) return
-    if (hasSavedLocation) return
-    if (isGroupLocationPromptSkipped(groupId)) return
-    setGroupLocModalOpen(true)
-  }, [groupSettingsLoading, isDefaultGroup, hasSavedLocation, groupId])
+    setWelcomePhase(null)
+    setDashboardReveal(false)
+  }, [groupId])
+
+  const locPromptSkipped = isGroupLocationPromptSkipped(groupId)
+  const welcomeActive =
+    !isDefaultGroup &&
+    !locPromptSkipped &&
+    (groupSettingsLoading ||
+      !hasSavedLocation ||
+      welcomePhase === 'success' ||
+      welcomePhase === 'exit')
+
+  const runWelcomeSavedSequence = useCallback(async () => {
+    setWelcomePhase('success')
+    await new Promise((r) => setTimeout(r, 1150))
+    setWelcomePhase('exit')
+    await new Promise((r) => setTimeout(r, 520))
+    setWelcomePhase(null)
+    requestAnimationFrame(() => {
+      setDashboardReveal(true)
+      window.setTimeout(() => setDashboardReveal(false), 720)
+    })
+  }, [])
+
+  const handleWelcomeSkip = useCallback(() => {
+    setGroupLocationPromptSkipped(groupId, true)
+    setWelcomePhase(null)
+    requestAnimationFrame(() => {
+      setDashboardReveal(true)
+      window.setTimeout(() => setDashboardReveal(false), 720)
+    })
+  }, [groupId])
 
   useEffect(() => {
     if (loading || didAutoScrollRef.current || grouped.today.length === 0) {
@@ -328,8 +358,14 @@ export function Dashboard() {
   const idxGood = grouped.today.length + grouped.soon.length
   const forecastActive = weatherContext?.adjustmentsActive === true
 
+  const groupLabel = spaceLabel.replace(/\s+plants$/i, '').trim() || spaceLabel
+
   return (
     <div className="app-shell">
+      <div
+        className={`dashboard-layer ${welcomeActive ? 'dashboard-layer--obscured' : ''} ${dashboardReveal && !welcomeActive ? 'dashboard-layer--reveal' : ''}`}
+        aria-hidden={welcomeActive ? true : undefined}
+      >
       <header className="app-header">
         <div className="app-header-main">
           <div className="app-header-brand-row">
@@ -538,11 +574,23 @@ export function Dashboard() {
       <GroupLocationModal
         open={groupLocModalOpen}
         onClose={() => setGroupLocModalOpen(false)}
-        groupLabel={spaceLabel.replace(/\s+plants$/i, '').trim() || spaceLabel}
+        groupLabel={groupLabel}
         isDefaultGroup={isDefaultGroup}
         saveLocation={saveGroupLocationFields}
         onSkipNotNow={() => setGroupLocationPromptSkipped(groupId, true)}
       />
+      </div>
+
+      {welcomeActive ? (
+        <GroupWelcomeScreen
+          groupLabel={groupLabel}
+          saveLocation={saveGroupLocationFields}
+          onSkip={handleWelcomeSkip}
+          onSavedSequence={runWelcomeSavedSequence}
+          phase={welcomePhase ?? 'idle'}
+          settingsLoading={groupSettingsLoading}
+        />
+      ) : null}
     </div>
   )
 }
