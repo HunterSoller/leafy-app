@@ -21,10 +21,11 @@ export function useNfcPlant(tagId) {
   const configured = useMemo(() => isFirebaseConfigured(), [])
   const [plant, setPlant] = useState(undefined)
   const [error, setError] = useState(null)
-  const [hasRemote, setHasRemote] = useState(false)
+  const [hasRemote, setHasRemote] = useState(() => !tagId)
 
   useEffect(() => {
     if (!configured || !tagId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- reset when tag or config is absent
       setPlant(null)
       setHasRemote(true)
       setError(null)
@@ -47,10 +48,11 @@ export function useNfcPlant(tagId) {
     return unsub
   }, [tagId, configured])
 
-  const loading = configured && !hasRemote
+  const loading = Boolean(configured && tagId && !hasRemote)
 
   const createPlant = useCallback(
     async (payload) => {
+      if (!tagId) throw new Error('No plant tag')
       await createNfcPlantDocument(tagId, payload)
     },
     [tagId],
@@ -58,17 +60,20 @@ export function useNfcPlant(tagId) {
 
   const updatePlant = useCallback(
     async (patch) => {
+      if (!tagId) throw new Error('No plant tag')
       await updateNfcPlantDocument(tagId, patch)
     },
     [tagId],
   )
 
   const resetPlant = useCallback(async () => {
+    if (!tagId) throw new Error('No plant tag')
     await deleteNfcPlantDocument(tagId)
   }, [tagId])
 
   const waterPlant = useCallback(
     async (wateringIntervalDays) => {
+      if (!tagId) throw new Error('No plant tag')
       await recordNfcPlantWatering(tagId, wateringIntervalDays)
     },
     [tagId],

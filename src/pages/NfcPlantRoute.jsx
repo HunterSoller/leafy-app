@@ -37,10 +37,7 @@ function NfcBadLink() {
 export function NfcPlantRoute() {
   const { tagId: raw } = useParams()
   const tagId = raw?.trim() ?? ''
-
-  if (!isValidNfcTagId(tagId)) {
-    return <NfcBadLink />
-  }
+  const tagOk = isValidNfcTagId(tagId)
 
   const {
     plant,
@@ -50,7 +47,11 @@ export function NfcPlantRoute() {
     updatePlant,
     resetPlant,
     waterPlant,
-  } = useNfcPlant(tagId)
+  } = useNfcPlant(tagOk ? tagId : null)
+
+  if (!tagOk) {
+    return <NfcBadLink />
+  }
 
   if (loading) {
     return <NfcLoading />

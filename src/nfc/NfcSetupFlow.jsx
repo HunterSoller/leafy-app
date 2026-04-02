@@ -22,6 +22,16 @@ function buildCareSummary(n) {
   return parts.join(' ').replace(/\s+/g, ' ').trim().slice(0, 620)
 }
 
+/** First clause from schedule if it reads like light guidance; else empty (dashboard uses default). */
+function inferCareLightLine(scheduleNote) {
+  const s = String(scheduleNote || '').trim()
+  if (!s) return ''
+  if (!/light|sun|window|shade|bright|indirect|low light/i.test(s)) return ''
+  const first = s.split(/[.!?]/)[0]?.trim()
+  if (first && first.length <= 140) return first
+  return ''
+}
+
 export function NfcSetupFlow({ configured, createPlant, onCreated }) {
   const [step, setStep] = useState('welcome')
   const [imageDataUrl, setImageDataUrl] = useState(null)
@@ -117,6 +127,10 @@ export function NfcSetupFlow({ configured, createPlant, onCreated }) {
         imageUrl: storedImg,
         wateringIntervalDays: aiResult.wateringIntervalDays,
         careSummary: buildCareSummary(aiResult),
+        careLightLine: inferCareLightLine(aiResult.scheduleNote),
+        careScheduleNote: String(aiResult.scheduleNote || '')
+          .trim()
+          .slice(0, 500),
         waterAmountText: aiResult.waterAmountText,
         howToWaterText: aiResult.howToWaterText,
         warningSignsText: aiResult.warningSignsText,
@@ -272,8 +286,8 @@ export function NfcSetupFlow({ configured, createPlant, onCreated }) {
           </p>
           <div className="nfc-result-block">
             <p className="nfc-result-meta">
-              Water about every{' '}
-              <strong>{aiResult.wateringIntervalDays}</strong> days · indoor
+              Usually every ~<strong>{aiResult.wateringIntervalDays}</strong> days
+              · indoor
             </p>
             {aiResult.scheduleNote ? (
               <p className="nfc-care-snippet">{aiResult.scheduleNote}</p>

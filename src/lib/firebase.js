@@ -119,6 +119,8 @@ export async function createNfcPlantDocument(tagId, payload) {
       wateringFrequencyDays: interval,
 
       careSummary: payload.careSummary ?? '',
+      careLightLine: payload.careLightLine ?? '',
+      careScheduleNote: payload.careScheduleNote ?? '',
       notes: payload.notes ?? '',
 
       waterAmountText: payload.waterAmountText ?? '',

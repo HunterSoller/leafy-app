@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   getIndoorWateringStatus,
   formatLastWateredHuman,
+  getStructuredCare,
+  toJsDate,
 } from '../lib/indoorWatering'
 import { subscribeWateringLogForTag } from '../lib/firebase'
 import { ConfirmDialog } from '../components/ConfirmDialog'
@@ -34,8 +36,50 @@ export function NfcPlantDashboard({
   )
   const [saveBusy, setSaveBusy] = useState(false)
   const [confirmReset, setConfirmReset] = useState(false)
+  const [optimisticWateredAt, setOptimisticWateredAt] = useState(null)
+  const [now, setNow] = useState(() => new Date())
 
-  const status = useMemo(() => getIndoorWateringStatus(plant), [plant])
+  useEffect(() => {
+    setNow(new Date())
+  }, [
+    plant?.lastWateredAt,
+    plant?.lastWatered,
+    plant?.wateringIntervalDays,
+  ])
+
+  useEffect(() => {
+    const refresh = () => {
+      if (document.visibilityState === 'visible') setNow(new Date())
+    }
+    document.addEventListener('visibilitychange', refresh)
+    return () => document.removeEventListener('visibilitychange', refresh)
+  }, [])
+
+  const effectivePlant = useMemo(() => {
+    if (!optimisticWateredAt) return plant
+    return {
+      ...plant,
+      lastWateredAt: optimisticWateredAt,
+      lastWatered: optimisticWateredAt,
+    }
+  }, [plant, optimisticWateredAt])
+
+  useEffect(() => {
+    if (!optimisticWateredAt) return
+    const server = toJsDate(plant.lastWateredAt ?? plant.lastWatered)
+    if (!server) return
+    // Firestore “now” can be slightly before the client tap; allow slack.
+    if (server.getTime() >= optimisticWateredAt.getTime() - 120000) {
+      setOptimisticWateredAt(null)
+    }
+  }, [plant, optimisticWateredAt])
+
+  const status = useMemo(
+    () => getIndoorWateringStatus(effectivePlant, now),
+    [effectivePlant, now],
+  )
+
+  const care = useMemo(() => getStructuredCare(effectivePlant), [effectivePlant])
 
   useEffect(() => {
     if (!historyOpen || !plant.tagId) return undefined
@@ -49,13 +93,15 @@ export function NfcPlantDashboard({
 
   const onWater = useCallback(async () => {
     if (waterBusy) return
+    const optimisticDate = new Date()
     setWaterBusy(true)
+    setOptimisticWateredAt(optimisticDate)
     try {
       await waterPlant(plant.wateringIntervalDays ?? 7)
       setToast(true)
-      window.setTimeout(() => setToast(false), 2400)
+      window.setTimeout(() => setToast(false), 1050)
     } catch {
-      /* handled by button state */
+      setOptimisticWateredAt(null)
     } finally {
       setWaterBusy(false)
     }
@@ -74,6 +120,7 @@ export function NfcPlantDashboard({
         wateringFrequencyDays: n,
       })
       setEditOpen(false)
+      setNow(new Date())
     } finally {
       setSaveBusy(false)
     }
@@ -89,6 +136,11 @@ export function NfcPlantDashboard({
     plant.type ||
     plant.displayName ||
     'Indoor plant'
+
+  const lastWateredLine = formatLastWateredHuman(
+    effectivePlant.lastWateredAt ?? effectivePlant.lastWatered,
+    now,
+  )
 
   return (
     <div className="nfc-shell nfc-plant">
@@ -120,30 +172,54 @@ export function NfcPlantDashboard({
         <p className="nfc-plant-type">{typeLine}</p>
 
         <div
-          className={`nfc-status-pill nfc-status-pill--${status.kind}`}
+          className={`nfc-status-card nfc-status-card--${status.kind}`}
           role="status"
         >
-          <span className="nfc-status-primary">{status.primary}</span>
-          {status.secondary ? (
-            <span className="nfc-status-secondary">{status.secondary}</span>
+          <span className="nfc-status-title">{status.title}</span>
+          {status.subtitle ? (
+            <span className="nfc-status-subtitle">{status.subtitle}</span>
           ) : null}
+          <span className="nfc-status-soil">{status.soilHelper}</span>
         </div>
+
+        <div className="nfc-divider" aria-hidden />
 
         <div className="nfc-meta-block">
-          <p className="nfc-meta-line">{formatLastWateredHuman(plant.lastWateredAt ?? plant.lastWatered)}</p>
-          {status.kind !== 'never' && plant.wateringIntervalDays ? (
-            <p className="nfc-meta-line nfc-meta-line--soft">
-              About every {plant.wateringIntervalDays} days
-            </p>
-          ) : null}
+          <p className="nfc-meta-line">{lastWateredLine}</p>
+          <p className="nfc-meta-line nfc-meta-line--trust">
+            Based on typical indoor care — adjust if the soil still feels moist.
+          </p>
         </div>
 
-        {plant.careSummary ? (
-          <section className="nfc-care-box">
-            <h2 className="nfc-care-title">Care</h2>
-            <p className="nfc-care-text">{plant.careSummary}</p>
-          </section>
-        ) : null}
+        <div className="nfc-divider nfc-divider--light" aria-hidden />
+
+        <section className="nfc-care-box">
+          <h2 className="nfc-care-heading">Care</h2>
+          <div className="nfc-care-section">
+            <h3 className="nfc-care-label">Light</h3>
+            <ul className="nfc-care-list">
+              <li>{care.lightLine}</li>
+            </ul>
+          </div>
+          <div className="nfc-care-section">
+            <h3 className="nfc-care-label">Water</h3>
+            <ul className="nfc-care-list">
+              {care.waterBullets.map((line, i) => (
+                <li key={`water-${i}`}>{line}</li>
+              ))}
+            </ul>
+          </div>
+          {care.extraBullets.length > 0 ? (
+            <div className="nfc-care-section">
+              <h3 className="nfc-care-label">Extra</h3>
+              <ul className="nfc-care-list">
+                {care.extraBullets.map((line, i) => (
+                  <li key={`extra-${i}`}>{line}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+        </section>
 
         <button
           type="button"
@@ -186,7 +262,7 @@ export function NfcPlantDashboard({
           </span>
           <div>
             <p className="nfc-toast-title">Watering logged</p>
-            <p className="nfc-toast-sub">Your plant’s schedule is updated.</p>
+            <p className="nfc-toast-sub">Plant refreshed.</p>
           </div>
         </div>
       ) : null}

@@ -308,91 +308,161 @@
 }
 
 .nfc-plant-type {
-  margin: 0 0 18px;
+  margin: 0 0 22px;
   font-size: 15px;
   color: rgba(58, 47, 40, 0.55);
 }
 
-.nfc-status-pill {
+.nfc-status-card {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: 16px 18px;
-  border-radius: 18px;
-  margin-bottom: 18px;
+  gap: 6px;
+  padding: 20px 20px 18px;
+  border-radius: 20px;
+  margin-bottom: 0;
   border: 1px solid rgba(200, 190, 175, 0.45);
-  background: rgba(255, 255, 255, 0.75);
+  background: rgba(255, 255, 255, 0.82);
+  box-shadow: 0 10px 36px rgba(58, 47, 40, 0.06);
 }
 
-.nfc-status-pill--ok {
-  border-color: rgba(138, 175, 133, 0.45);
-  background: rgba(232, 240, 231, 0.65);
+.nfc-status-card--ok {
+  border-color: rgba(138, 175, 133, 0.5);
+  background: linear-gradient(
+    165deg,
+    rgba(240, 248, 238, 0.95) 0%,
+    rgba(228, 238, 225, 0.88) 100%
+  );
 }
 
-.nfc-status-pill--today {
-  border-color: rgba(212, 165, 116, 0.5);
-  background: rgba(255, 248, 238, 0.9);
+.nfc-status-card--almost {
+  border-color: rgba(178, 195, 140, 0.55);
+  background: linear-gradient(
+    165deg,
+    rgba(248, 252, 240, 0.98) 0%,
+    rgba(236, 244, 226, 0.9) 100%
+  );
 }
 
-.nfc-status-pill--overdue {
-  border-color: rgba(193, 96, 58, 0.35);
-  background: rgba(255, 241, 236, 0.85);
+.nfc-status-card--today {
+  border-color: rgba(212, 165, 116, 0.55);
+  background: rgba(255, 248, 238, 0.94);
 }
 
-.nfc-status-pill--never {
-  border-color: rgba(184, 201, 181, 0.5);
-  background: rgba(248, 251, 247, 0.9);
+.nfc-status-card--overdue {
+  border-color: rgba(193, 96, 58, 0.4);
+  background: rgba(255, 241, 236, 0.92);
 }
 
-.nfc-status-primary {
-  font-size: 18px;
+.nfc-status-card--never {
+  border-color: rgba(184, 201, 181, 0.55);
+  background: rgba(248, 251, 247, 0.95);
+}
+
+.nfc-status-title {
+  font-size: 1.25rem;
   font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
   color: #2c241f;
 }
 
-.nfc-status-secondary {
-  font-size: 15px;
+.nfc-status-subtitle {
+  font-size: 16px;
   font-weight: 500;
-  color: rgba(58, 47, 40, 0.68);
+  line-height: 1.35;
+  color: rgba(58, 47, 40, 0.72);
+}
+
+.nfc-status-soil {
+  margin-top: 4px;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.4;
+  color: rgba(58, 47, 40, 0.48);
+}
+
+.nfc-divider {
+  height: 1px;
+  margin: 22px 0;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(200, 190, 175, 0.55) 12%,
+    rgba(200, 190, 175, 0.55) 88%,
+    transparent
+  );
+}
+
+.nfc-divider--light {
+  margin: 20px 0 24px;
+  opacity: 0.75;
 }
 
 .nfc-meta-block {
-  margin-bottom: 22px;
+  margin-bottom: 0;
 }
 
 .nfc-meta-line {
-  margin: 0 0 6px;
+  margin: 0 0 8px;
   font-size: 15px;
+  line-height: 1.45;
   color: rgba(58, 47, 40, 0.78);
 }
 
-.nfc-meta-line--soft {
-  font-size: 14px;
-  color: rgba(58, 47, 40, 0.5);
+.nfc-meta-line--trust {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: rgba(58, 47, 40, 0.48);
 }
 
 .nfc-care-box {
-  margin-bottom: 24px;
-  padding: 16px 18px;
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.65);
-  border: 1px solid rgba(200, 190, 175, 0.4);
+  margin-bottom: 28px;
+  padding: 20px 20px 18px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(200, 190, 175, 0.42);
 }
 
-.nfc-care-title {
-  margin: 0 0 8px;
+.nfc-care-heading {
+  margin: 0 0 16px;
   font-size: 12px;
   font-weight: 700;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: rgba(58, 47, 40, 0.45);
+  color: rgba(58, 47, 40, 0.42);
 }
 
-.nfc-care-text {
+.nfc-care-section {
+  margin-bottom: 16px;
+}
+
+.nfc-care-section:last-child {
+  margin-bottom: 0;
+}
+
+.nfc-care-label {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: rgba(58, 47, 40, 0.55);
+}
+
+.nfc-care-list {
   margin: 0;
+  padding-left: 1.1rem;
   font-size: 15px;
-  line-height: 1.5;
-  color: rgba(58, 47, 40, 0.82);
+  line-height: 1.45;
+  color: rgba(58, 47, 40, 0.84);
+}
+
+.nfc-care-list li {
+  margin-bottom: 6px;
+}
+
+.nfc-care-list li:last-child {
+  margin-bottom: 0;
 }
 
 .nfc-btn-water {
