@@ -248,6 +248,35 @@
   color: rgba(47, 74, 44, 0.88);
 }
 
+.nfc-care-snippet--muted {
+  margin-top: 8px;
+  font-size: 13px;
+  color: rgba(47, 74, 44, 0.72);
+}
+
+.nfc-select {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%235a4a42' d='M1.4 0 6 4.6 10.6 0 12 1.4l-6 6-6-6z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  padding-right: 40px;
+  cursor: pointer;
+}
+
+.nfc-edit-hint {
+  margin: -8px 0 16px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: rgba(58, 47, 40, 0.5);
+}
+
+.nfc-plant-fallback-note {
+  margin: -4px 0 14px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: rgba(58, 47, 40, 0.52);
+}
+
 .nfc-inline-error {
   margin: -8px 0 14px;
   font-size: 14px;

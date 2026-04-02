@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from 'react'
 import { identifyPlantRequest } from '../lib/identifyPlantClient'
 import { prepareImageForIdentify, prepareImageForStorage } from '../lib/imagePrep'
+import { applyIndoorCareProfileToAiResult } from '../lib/plantCareProfiles'
 
 function v1IdentificationHeadline(n) {
   if (!n) return ''
@@ -20,6 +21,22 @@ function buildCareSummary(n) {
     n.warningSignsText && `Watch for: ${n.warningSignsText}`,
   ].filter(Boolean)
   return parts.join(' ').replace(/\s+/g, ' ').trim().slice(0, 620)
+}
+
+function buildCareSummaryForSave(n) {
+  if (!n) return ''
+  const a = n.careLightBullets?.[0]
+  const b = n.careWaterBullets?.[0]
+  const c = n.careExtraBullets?.[0]
+  if (a || b || c) {
+    return [a, b, c]
+      .filter(Boolean)
+      .join(' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 620)
+  }
+  return buildCareSummary(n)
 }
 
 /** First clause from schedule if it reads like light guidance; else empty (dashboard uses default). */
@@ -88,7 +105,7 @@ export function NfcSetupFlow({ configured, createPlant, onCreated }) {
 
   const useManualGuess = useCallback(() => {
     const hint = customName.trim()
-    setAiResult({
+    const base = {
       displayName: hint || 'Your plant',
       typeLabel: hint || 'Indoor plant',
       wateringIntervalDays: 7,
@@ -105,7 +122,8 @@ export function NfcSetupFlow({ configured, createPlant, onCreated }) {
       detectedType: 'houseplant',
       scientificName: '',
       sceneType: 'single_plant',
-    })
+    }
+    setAiResult(applyIndoorCareProfileToAiResult(base, hint))
     setStep('result')
   }, [customName])
 
@@ -122,12 +140,20 @@ export function NfcSetupFlow({ configured, createPlant, onCreated }) {
       await createPlant({
         customName: customName.trim() || '',
         identifiedPlantName: identified,
+        canonicalPlantName: aiResult.canonicalPlantName ?? '',
         displayName: display,
-        type: identified,
+        type: aiResult.canonicalPlantName || identified,
         imageUrl: storedImg,
         wateringIntervalDays: aiResult.wateringIntervalDays,
-        careSummary: buildCareSummary(aiResult),
-        careLightLine: inferCareLightLine(aiResult.scheduleNote),
+        displayWaterRange: aiResult.displayWaterRange ?? '',
+        careSummary: buildCareSummaryForSave(aiResult),
+        careLightLine:
+          aiResult.careLightBullets?.[0] ||
+          inferCareLightLine(aiResult.scheduleNote),
+        careLightBullets: aiResult.careLightBullets ?? [],
+        careWaterBullets: aiResult.careWaterBullets ?? [],
+        careExtraBullets: aiResult.careExtraBullets ?? [],
+        careProfileFallback: Boolean(aiResult.careProfileFallback),
         careScheduleNote: String(aiResult.scheduleNote || '')
           .trim()
           .slice(0, 500),
@@ -286,10 +312,20 @@ export function NfcSetupFlow({ configured, createPlant, onCreated }) {
           </p>
           <div className="nfc-result-block">
             <p className="nfc-result-meta">
-              Usually every ~<strong>{aiResult.wateringIntervalDays}</strong> days
-              · indoor
+              Usually every <strong>{aiResult.displayWaterRange || `${aiResult.wateringIntervalDays} days`}</strong>
+              {aiResult.canonicalPlantName ? (
+                <>
+                  {' '}
+                  · <span>{aiResult.canonicalPlantName}</span>
+                </>
+              ) : null}
             </p>
-            {aiResult.scheduleNote ? (
+            {aiResult.careProfileFallback ? (
+              <p className="nfc-care-snippet nfc-care-snippet--muted">
+                We’ll use general indoor guidance — you can pick a closer plant type after saving.
+              </p>
+            ) : null}
+            {aiResult.scheduleNote && !aiResult.careProfileFallback ? (
               <p className="nfc-care-snippet">{aiResult.scheduleNote}</p>
             ) : null}
           </div>

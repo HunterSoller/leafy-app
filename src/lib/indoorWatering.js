@@ -12,6 +12,12 @@ export function toJsDate(v) {
   return new Date(v)
 }
 
+function wateringIntervalFromPlant(plant) {
+  const raw = Math.round(Number(plant?.wateringIntervalDays))
+  if (Number.isFinite(raw) && raw >= 1) return Math.min(raw, 60)
+  return 7
+}
+
 /**
  * Dynamic status for plant card.
  * @returns {{
@@ -24,7 +30,7 @@ export function toJsDate(v) {
  * }}
  */
 export function getIndoorWateringStatus(plant, now = new Date()) {
-  const interval = Math.max(1, Math.round(Number(plant?.wateringIntervalDays)) || 7)
+  const interval = wateringIntervalFromPlant(plant)
   const last = toJsDate(plant?.lastWateredAt ?? plant?.lastWatered)
 
   const soilHelper = 'Check soil before watering'
@@ -110,12 +116,85 @@ export function formatLastWateredHuman(lastWateredAt, now = new Date()) {
 const DEFAULT_LIGHT = 'Bright, indirect light suits most indoor plants.'
 const DEFAULT_WATER = 'Water when the top 1–2 inches of soil feel dry.'
 
+function trimBullet(s, max = 160) {
+  return String(s || '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, max)
+}
+
 /**
- * Scannable CARE blocks from stored fields + optional careSummary fallback.
+ * Scannable CARE blocks from stored profile bullets; legacy docs use older fields.
+ * @returns {{ lightBullets: string[], waterBullets: string[], extraBullets: string[] }}
  */
 export function getStructuredCare(plant) {
-  const interval = Math.max(1, Math.round(Number(plant?.wateringIntervalDays)) || 7)
+  const range =
+    typeof plant?.displayWaterRange === 'string' && plant.displayWaterRange.trim()
+      ? plant.displayWaterRange.trim()
+      : null
 
+  const hasProfileArrays =
+    (Array.isArray(plant?.careLightBullets) && plant.careLightBullets.length > 0) ||
+    (Array.isArray(plant?.careWaterBullets) && plant.careWaterBullets.length > 0) ||
+    (Array.isArray(plant?.careExtraBullets) && plant.careExtraBullets.length > 0)
+
+  if (hasProfileArrays || range) {
+    const lightBullets = []
+    if (Array.isArray(plant?.careLightBullets)) {
+      for (const s of plant.careLightBullets) {
+        const t = trimBullet(s)
+        if (t) lightBullets.push(t)
+      }
+    }
+    if (!lightBullets.length && typeof plant?.careLightLine === 'string' && plant.careLightLine.trim()) {
+      lightBullets.push(trimBullet(plant.careLightLine))
+    }
+    if (!lightBullets.length) lightBullets.push(DEFAULT_LIGHT)
+
+    const waterBullets = []
+    if (Array.isArray(plant?.careWaterBullets)) {
+      for (const s of plant.careWaterBullets) {
+        const t = trimBullet(s)
+        if (t) waterBullets.push(t)
+      }
+    }
+    if (!waterBullets.length) {
+      const how = String(plant?.howToWaterText || '').trim()
+      const amt = String(plant?.waterAmountText || '').trim()
+      waterBullets.push(trimBullet(how || amt || DEFAULT_WATER))
+    }
+    if (range) {
+      waterBullets.push(`Usually every ${range}`)
+    } else {
+      const iv = wateringIntervalFromPlant(plant)
+      waterBullets.push(`Usually every ~${iv} days`)
+    }
+
+    const extraBullets = []
+    if (Array.isArray(plant?.careExtraBullets)) {
+      for (const s of plant.careExtraBullets) {
+        const t = trimBullet(s)
+        if (t) extraBullets.push(t)
+      }
+    }
+    const warn = String(plant?.warningSignsText || '').trim()
+    if (extraBullets.length < 2 && warn) extraBullets.push(trimBullet(warn))
+    const sched = String(plant?.careScheduleNote || '').trim()
+    if (extraBullets.length < 2 && sched) {
+      const short = trimBullet(sched)
+      if (!extraBullets.length || !extraBullets[0].includes(short.slice(0, 28))) {
+        extraBullets.push(short)
+      }
+    }
+
+    return {
+      lightBullets,
+      waterBullets,
+      extraBullets: extraBullets.slice(0, 2),
+    }
+  }
+
+  /* Legacy documents (pre-profile) */
   let lightLine =
     typeof plant?.careLightLine === 'string' && plant.careLightLine.trim()
       ? plant.careLightLine.trim().slice(0, 140)
@@ -138,7 +217,8 @@ export function getStructuredCare(plant) {
   const amt = String(plant?.waterAmountText || '').trim()
   const waterBullets = []
   waterBullets.push((how || amt || DEFAULT_WATER).replace(/\s+/g, ' ').slice(0, 160))
-  waterBullets.push(`Usually every ~${interval} days`)
+  const iv = wateringIntervalFromPlant(plant)
+  waterBullets.push(`Usually every ~${iv} days`)
 
   const extra = []
   const warn = String(plant?.warningSignsText || '').trim()
@@ -169,7 +249,7 @@ export function getStructuredCare(plant) {
   }
 
   return {
-    lightLine,
+    lightBullets: [lightLine],
     waterBullets,
     extraBullets: extra.slice(0, 2),
   }

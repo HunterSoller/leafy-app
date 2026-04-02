@@ -1,6 +1,7 @@
 import { addCalendarDaysNY } from './wateringLogic'
 import { computeJitterDays } from './plantCareRules'
 import { POT_WATER } from './defaults'
+import { matchIndoorCareProfileFromAi } from './plantCareProfiles'
 
 /** Legacy threshold; photo flow always requires explicit user confirmation before save. */
 export const AUTO_SAVE_MIN_CONFIDENCE = 0.75
@@ -28,7 +29,8 @@ function clampInterval(v, sceneType, environment) {
   if (sceneType === 'garden_area' || sceneType === 'multiple_plants') {
     d = Math.min(Math.max(d, 2), environment === 'outdoor' ? 6 : 6)
   } else {
-    d = Math.min(Math.max(d, 2), 14)
+    const cap = environment === 'indoor' ? 30 : 14
+    d = Math.min(Math.max(d, 2), cap)
   }
   return d
 }
@@ -284,18 +286,41 @@ export function normalizeAiPlantResult(raw, ctx = {}) {
     environment,
   )
 
-  const jitter = computeJitterDays(jitterKey, jitterEventIndex)
-  merged.nextWateringAt = addCalendarDaysNY(
-    new Date(),
-    merged.wateringIntervalDays + jitter,
-  )
-
   merged.displayName = polishOutdoorDisplayName(
     merged.displayName,
     nameHint,
     environment,
   )
   merged.typeLabel = merged.displayName
+
+  if (environment === 'indoor' && merged.sceneType === 'single_plant') {
+    const p = matchIndoorCareProfileFromAi({
+      displayName: merged.displayName,
+      typeLabel: merged.typeLabel,
+      detectedType: merged.detectedType,
+      scientificName: merged.scientificName,
+      nameHint,
+    })
+    merged.wateringIntervalDays = clampInterval(
+      p.intervalDays,
+      merged.sceneType,
+      environment,
+    )
+    merged.canonicalPlantName = p.canonicalName
+    merged.displayWaterRange = p.displayWaterRange
+    merged.careLightBullets = [...p.lightBullets]
+    merged.careWaterBullets = [...p.waterBullets]
+    merged.careExtraBullets = [...p.extraBullets]
+    merged.careProfileFallback = p.matchedFromFallback
+    if (p.lightBullets[0]) merged.careLightLine = p.lightBullets[0]
+    if (p.waterBullets[0]) merged.howToWaterText = p.waterBullets[0]
+  }
+
+  const jitter = computeJitterDays(jitterKey, jitterEventIndex)
+  merged.nextWateringAt = addCalendarDaysNY(
+    new Date(),
+    merged.wateringIntervalDays + jitter,
+  )
 
   return merged
 }

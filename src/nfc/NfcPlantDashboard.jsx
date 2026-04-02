@@ -7,6 +7,13 @@ import {
 } from '../lib/indoorWatering'
 import { subscribeWateringLogForTag } from '../lib/firebase'
 import { ConfirmDialog } from '../components/ConfirmDialog'
+import {
+  getProfileByCanonicalName,
+  listProfilesForPicker,
+  matchIndoorCareProfile,
+  profileToFirestorePatch,
+  INDOOR_PLANT_FALLBACK,
+} from '../lib/plantCareProfiles'
 
 function formatLogRow(row) {
   const t = row.wateredAt?.toDate?.() ?? row.wateredAt
@@ -31,8 +38,13 @@ export function NfcPlantDashboard({
   const [historyOpen, setHistoryOpen] = useState(false)
   const [log, setLog] = useState([])
   const [editName, setEditName] = useState(plant.displayName || plant.name || '')
-  const [editInterval, setEditInterval] = useState(
-    String(plant.wateringIntervalDays ?? 7),
+  const [editCanonical, setEditCanonical] = useState(
+    () =>
+      plant.canonicalPlantName ||
+      matchIndoorCareProfile([
+        plant.identifiedPlantName,
+        plant.type,
+      ]).canonicalName,
   )
   const [saveBusy, setSaveBusy] = useState(false)
   const [confirmReset, setConfirmReset] = useState(false)
@@ -88,7 +100,11 @@ export function NfcPlantDashboard({
 
   useEffect(() => {
     setEditName(plant.displayName || plant.name || '')
-    setEditInterval(String(plant.wateringIntervalDays ?? 7))
+    setEditCanonical(
+      plant.canonicalPlantName ||
+        matchIndoorCareProfile([plant.identifiedPlantName, plant.type])
+          .canonicalName,
+    )
   }, [plant])
 
   const onWater = useCallback(async () => {
@@ -108,23 +124,30 @@ export function NfcPlantDashboard({
   }, [waterBusy, waterPlant, plant.wateringIntervalDays])
 
   const saveEdit = useCallback(async () => {
-    const n = Math.max(1, Math.min(21, Math.round(Number(editInterval)) || 7))
     const name = editName.trim() || plant.identifiedPlantName || 'Plant'
+    const prof =
+      getProfileByCanonicalName(editCanonical) || {
+        ...INDOOR_PLANT_FALLBACK,
+        matchedFromFallback: true,
+      }
+    const patch = profileToFirestorePatch(prof)
     setSaveBusy(true)
     try {
       await updatePlant({
         customName: editName.trim(),
         displayName: name,
         name,
-        wateringIntervalDays: n,
-        wateringFrequencyDays: n,
+        ...patch,
+        identifiedPlantName: prof.canonicalName,
+        careLightLine: prof.lightBullets[0] || '',
+        howToWaterText: prof.waterBullets[0] || plant.howToWaterText,
       })
       setEditOpen(false)
       setNow(new Date())
     } finally {
       setSaveBusy(false)
     }
-  }, [editName, editInterval, plant.identifiedPlantName, updatePlant])
+  }, [editName, editCanonical, plant.howToWaterText, plant.identifiedPlantName, updatePlant])
 
   const doReset = useCallback(async () => {
     await resetPlant()
@@ -132,9 +155,9 @@ export function NfcPlantDashboard({
   }, [resetPlant])
 
   const typeLine =
+    plant.canonicalPlantName ||
     plant.identifiedPlantName ||
     plant.type ||
-    plant.displayName ||
     'Indoor plant'
 
   const lastWateredLine = formatLastWateredHuman(
@@ -170,6 +193,11 @@ export function NfcPlantDashboard({
           {plant.displayName || plant.name || 'Your plant'}
         </h1>
         <p className="nfc-plant-type">{typeLine}</p>
+        {plant.careProfileFallback ? (
+          <p className="nfc-plant-fallback-note">
+            Matched as a general indoor plant — choose a closer type in Edit if you know it.
+          </p>
+        ) : null}
 
         <div
           className={`nfc-status-card nfc-status-card--${status.kind}`}
@@ -198,7 +226,8 @@ export function NfcPlantDashboard({
         <div className="nfc-meta-block">
           <p className="nfc-meta-line">{lastWateredLine}</p>
           <p className="nfc-meta-line nfc-meta-line--trust">
-            Based on typical indoor care — adjust if the soil still feels moist.
+            Based on typical care for this plant — check soil before watering and adjust if
+            it still feels moist.
           </p>
         </div>
 
@@ -209,7 +238,9 @@ export function NfcPlantDashboard({
           <div className="nfc-care-section">
             <h3 className="nfc-care-label">Light</h3>
             <ul className="nfc-care-list">
-              <li>{care.lightLine}</li>
+              {care.lightBullets.map((line, i) => (
+                <li key={`light-${i}`}>{line}</li>
+              ))}
             </ul>
           </div>
           <div className="nfc-care-section">
@@ -294,19 +325,24 @@ export function NfcPlantDashboard({
               onChange={(e) => setEditName(e.target.value)}
               maxLength={80}
             />
-            <label className="nfc-field-label" htmlFor="nfc-edit-int">
-              Water every (days)
+            <label className="nfc-field-label" htmlFor="nfc-edit-profile">
+              Plant type
             </label>
-            <input
-              id="nfc-edit-int"
-              className="nfc-input"
-              type="number"
-              min={1}
-              max={21}
-              inputMode="numeric"
-              value={editInterval}
-              onChange={(e) => setEditInterval(e.target.value)}
-            />
+            <select
+              id="nfc-edit-profile"
+              className="nfc-input nfc-select"
+              value={editCanonical}
+              onChange={(e) => setEditCanonical(e.target.value)}
+            >
+              {listProfilesForPicker().map((p) => (
+                <option key={p.canonicalName} value={p.canonicalName}>
+                  {p.canonicalName}
+                </option>
+              ))}
+            </select>
+            <p className="nfc-edit-hint">
+              Not the right plant? Pick a match — we’ll update watering rhythm and care tips.
+            </p>
             <div className="nfc-sheet-actions">
               <button
                 type="button"

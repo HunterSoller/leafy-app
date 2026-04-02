@@ -97,7 +97,7 @@ export async function createNfcPlantDocument(tagId, payload) {
   const now = serverTimestamp()
   const interval = Math.max(
     1,
-    Math.round(Number(payload.wateringIntervalDays)) || 7,
+    Math.min(30, Math.round(Number(payload.wateringIntervalDays)) || 7),
   )
 
   await setDoc(
@@ -110,16 +110,28 @@ export async function createNfcPlantDocument(tagId, payload) {
 
       customName: payload.customName ?? '',
       identifiedPlantName: payload.identifiedPlantName ?? '',
+      canonicalPlantName: payload.canonicalPlantName ?? '',
       displayName: payload.displayName ?? payload.identifiedPlantName ?? 'Plant',
       name: payload.displayName ?? payload.identifiedPlantName ?? 'Plant',
-      type: payload.type ?? payload.identifiedPlantName ?? '',
+      type: payload.type ?? payload.canonicalPlantName ?? payload.identifiedPlantName ?? '',
 
       imageUrl: payload.imageUrl ?? null,
       wateringIntervalDays: interval,
       wateringFrequencyDays: interval,
+      displayWaterRange: payload.displayWaterRange ?? '',
 
       careSummary: payload.careSummary ?? '',
       careLightLine: payload.careLightLine ?? '',
+      careLightBullets: Array.isArray(payload.careLightBullets)
+        ? payload.careLightBullets
+        : [],
+      careWaterBullets: Array.isArray(payload.careWaterBullets)
+        ? payload.careWaterBullets
+        : [],
+      careExtraBullets: Array.isArray(payload.careExtraBullets)
+        ? payload.careExtraBullets
+        : [],
+      careProfileFallback: Boolean(payload.careProfileFallback),
       careScheduleNote: payload.careScheduleNote ?? '',
       notes: payload.notes ?? '',
 
@@ -171,7 +183,7 @@ export async function recordNfcPlantWatering(tagId, wateringIntervalDays) {
   const db = getDb()
   if (!db) throw new Error('Firebase is not configured')
   const now = new Date()
-  const interval = Math.max(1, Math.round(Number(wateringIntervalDays)) || 7)
+  const interval = Math.max(1, Math.min(30, Math.round(Number(wateringIntervalDays)) || 7))
   const nextDue = addDaysTimestamp(now, interval)
   const ref = doc(db, 'plants', tagId)
 
