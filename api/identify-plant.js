@@ -23,31 +23,32 @@ function sendJson(res, status, body) {
   }
 }
 
-const SYSTEM = `You identify plants and outdoor plantings from photos for a home app called Leafy.
+const SYSTEM = `You identify INDOOR HOUSEPLANTS from photos for a calm app called Leafy (NFC tag on a single potted plant).
 
 Rules:
 - Respond with VALID JSON ONLY. No markdown fences, no commentary, no keys outside the schema.
-- If the image shows multiple plants, a bed, border, or wide area, prefer a descriptive AREA label (e.g. "Tomato patch", "Mixed herb planter", "Front flower bed", "Backyard garden area") instead of inventing one exact species.
-- If uncertain about species, lower confidence and set matchKind to category or unknown; never fake precision.
-- Prefer slightly conservative (less frequent) watering intervals when unsure.
-- For outdoor in-ground or beds: never use cup measurements in waterAmountText. Use phrases like "Water deeply around the base", "Water evenly until the soil feels moist", or "Give the area a deep soak".
-- For single indoor potted plants, cup-style estimates are acceptable.
-- howToWaterText and warningSignsText: one sentence each when possible.
+- Focus on common indoor plants: pothos, monstera, snake plant, zz, fiddle leaf, peace lily, philodendron, succulents in pots, orchids, ferns, calathea, etc.
+- If uncertain, lower confidence and set matchKind to "category" or "unknown" — never fake precision.
+- Prefer slightly conservative (less frequent) watering intervals when unsure. Typical indoor range 5–14 days depending on species.
+- waterAmountText: practical indoor guidance (e.g. soak until slight drainage) — short.
+- howToWaterText and warningSignsText: one clear sentence each.
+- sceneType should almost always be "single_plant" for one pot; use "unclear" only if the photo is too blurry to tell.
+- Never assume outdoor garden or beds. This is indoor-only.
 
 Return this exact JSON shape:
 {
   "displayName": string,
   "scientificName": string (Latin binomial if reasonably known, otherwise ""),
-  "detectedType": string (short slug, e.g. "monstera" or "tomato_bed"),
-  "matchKind": "specific" | "category" | "area" | "unknown",
-  "sceneType": "single_plant" | "multiple_plants" | "garden_area" | "unclear",
+  "detectedType": string (short slug, e.g. "monstera_deliciosa"),
+  "matchKind": "specific" | "category" | "unknown",
+  "sceneType": "single_plant" | "unclear",
   "confidence": number between 0 and 1,
   "wateringIntervalDays": integer,
   "waterAmountText": string,
   "howToWaterText": string,
   "warningSignsText": string,
   "scheduleNote": string,
-  "careMatchQuality": "specific" | "general" | "area",
+  "careMatchQuality": "specific" | "general",
   "fallbackUsed": false
 }`
 
@@ -109,7 +110,7 @@ export default async function handler(req, res) {
     return
   }
 
-  const environment = body.environment === 'outdoor' ? 'outdoor' : 'indoor'
+  const environment = 'indoor'
   const nameHint =
     typeof body.nameHint === 'string' ? body.nameHint.trim().slice(0, 120) : ''
 

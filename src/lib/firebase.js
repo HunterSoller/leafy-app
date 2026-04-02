@@ -1,32 +1,20 @@
 import { initializeApp } from 'firebase/app'
 import {
   getFirestore,
-  collection,
   doc,
-  addDoc,
+  onSnapshot,
+  setDoc,
   updateDoc,
   deleteDoc,
-  onSnapshot,
+  collection,
+  addDoc,
   query,
   where,
+  limit,
   serverTimestamp,
   Timestamp,
   increment,
-  setDoc,
 } from 'firebase/firestore'
-import { DEFAULT_GROUP_ID, normalizeStoredGroupId } from './group'
-import {
-  readLocalGroupSettings,
-  writeLocalGroupSettings,
-} from './groupLocalSettings'
-
-function docHasSavedLocation(data) {
-  if (!data) return false
-  const la = Number(data.location_lat)
-  const ln = Number(data.location_lng)
-  return !Number.isNaN(la) && !Number.isNaN(ln)
-}
-import { getPlantIntervalDays, computeJitterDays } from './plantCareRules'
 
 function getConfig() {
   const {
@@ -73,290 +61,158 @@ export function addDaysTimestamp(from, days) {
 }
 
 /**
- * Plants for this group. Non-default uses an indexed equality query.
- * default-group includes legacy docs with no groupId (client-side filter).
+ * Real-time subscription: one plant document per NFC tag at `plants/{tagId}`.
+ * @param {string} tagId
+ * @param {(data: object | null) => void} onData - null if document missing
+ * @param {(err: Error) => void} [onError]
  */
-export function subscribePlants(groupId, onData, onError) {
+export function subscribeNfcPlant(tagId, onData, onError) {
   const db = getDb()
   if (!db) {
-    onData([])
+    onData(null)
     return () => {}
   }
 
-  const mapDocs = (snap) =>
-    snap.docs.map((d) => ({ id: d.id, ...d.data() }))
-
-  if (groupId !== DEFAULT_GROUP_ID) {
-    const q = query(
-      collection(db, 'plants'),
-      where('groupId', '==', groupId),
-    )
-    return onSnapshot(
-      q,
-      (snap) => onData(mapDocs(snap)),
-      (err) => onError?.(err),
-    )
-  }
-
-  return onSnapshot(
-    collection(db, 'plants'),
-    (snap) => {
-      const plants = mapDocs(snap).filter(
-        (p) => normalizeStoredGroupId(p.groupId) === DEFAULT_GROUP_ID,
-      )
-      onData(plants)
-    },
-    (err) => onError?.(err),
-  )
-}
-
-/**
- * Snapshot of watering_log for this group (use if you add a log UI later).
- */
-export function subscribeWateringLog(groupId, onData, onError) {
-  const db = getDb()
-  if (!db) {
-    onData([])
-    return () => {}
-  }
-
-  if (groupId !== DEFAULT_GROUP_ID) {
-    const q = query(
-      collection(db, 'watering_log'),
-      where('groupId', '==', groupId),
-    )
-    return onSnapshot(
-      q,
-      (snap) => onData(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
-      (err) => onError?.(err),
-    )
-  }
-
-  return onSnapshot(
-    collection(db, 'watering_log'),
-    (snap) => {
-      const rows = snap.docs
-        .map((d) => ({ id: d.id, ...d.data() }))
-        .filter((row) => normalizeStoredGroupId(row.groupId) === DEFAULT_GROUP_ID)
-      onData(rows)
-    },
-    (err) => onError?.(err),
-  )
-}
-
-/**
- * Per-group settings (e.g. weather location). Document id matches `groupId` from the URL / plants.
- * Fields: location_lat, location_lng, location_label, location_source ('browser' | 'manual')
- */
-export function subscribeGroupSettings(groupId, onData, onError) {
-  const id = normalizeStoredGroupId(groupId)
-  const db = getDb()
-  if (!db) {
-    try {
-      onData(readLocalGroupSettings(id))
-    } catch (e) {
-      onError?.(e)
-    }
-    return () => {}
-  }
-
-  const ref = doc(db, 'groups', id)
+  const ref = doc(db, 'plants', tagId)
   return onSnapshot(
     ref,
     (snap) => {
       if (!snap.exists()) {
-        onData(readLocalGroupSettings(id) ?? null)
+        onData(null)
         return
       }
-      const data = snap.data()
-      if (docHasSavedLocation(data)) {
-        onData(data)
-        return
-      }
-      const local = readLocalGroupSettings(id)
-      onData(docHasSavedLocation(local) ? local : null)
+      onData({ id: tagId, tagId, ...snap.data() })
     },
-    (err) => {
-      onError?.(err)
-      onData(readLocalGroupSettings(id))
-    },
+    (err) => onError?.(err),
   )
 }
 
 /**
- * @param {string} groupId
- * @param {{ location_lat: number, location_lng: number, location_label?: string, location_source?: 'browser' | 'manual' }} fields
+ * First-time setup: create the plant record for this tag (document id = tagId).
  */
-export async function saveGroupLocation(groupId, fields) {
-  const id = normalizeStoredGroupId(groupId)
-  const lat = Number(fields.location_lat)
-  const lng = Number(fields.location_lng)
-  if (Number.isNaN(lat) || Number.isNaN(lng)) {
-    throw new Error('Invalid coordinates')
-  }
-  const payload = {
-    location_lat: lat,
-    location_lng: lng,
-    location_label: String(fields.location_label ?? '').slice(0, 200),
-    location_source: fields.location_source === 'browser' ? 'browser' : 'manual',
-  }
-
-  const db = getDb()
-  if (!db) {
-    writeLocalGroupSettings(id, payload)
-    return
-  }
-
-  await setDoc(doc(db, 'groups', id), payload, { merge: true })
-  writeLocalGroupSettings(id, payload)
-}
-
-export async function persistPlantWaterBalance(id, patch) {
+export async function createNfcPlantDocument(tagId, payload) {
   const db = getDb()
   if (!db) throw new Error('Firebase is not configured')
-  const ref = doc(db, 'plants', id)
-  const clean = { ...patch }
+
+  const now = serverTimestamp()
+  const interval = Math.max(
+    1,
+    Math.round(Number(payload.wateringIntervalDays)) || 7,
+  )
+
+  await setDoc(
+    doc(db, 'plants', tagId),
+    {
+      tagId,
+      version: 1,
+      setupComplete: true,
+      location: 'indoor',
+
+      customName: payload.customName ?? '',
+      identifiedPlantName: payload.identifiedPlantName ?? '',
+      displayName: payload.displayName ?? payload.identifiedPlantName ?? 'Plant',
+      name: payload.displayName ?? payload.identifiedPlantName ?? 'Plant',
+      type: payload.type ?? payload.identifiedPlantName ?? '',
+
+      imageUrl: payload.imageUrl ?? null,
+      wateringIntervalDays: interval,
+      wateringFrequencyDays: interval,
+
+      careSummary: payload.careSummary ?? '',
+      notes: payload.notes ?? '',
+
+      waterAmountText: payload.waterAmountText ?? '',
+      howToWaterText: payload.howToWaterText ?? '',
+      warningSignsText: payload.warningSignsText ?? '',
+
+      lastWateredAt: null,
+      lastWatered: null,
+      nextWaterDue: null,
+
+      aiConfidence: payload.aiConfidence ?? null,
+      aiMatchKind: payload.aiMatchKind ?? null,
+      detectedType: payload.detectedType ?? '',
+      scientificName: payload.scientificName ?? '',
+
+      totalWaterCount: 0,
+      createdAt: now,
+      updatedAt: now,
+    },
+    { merge: false },
+  )
+}
+
+export async function updateNfcPlantDocument(tagId, patch) {
+  const db = getDb()
+  if (!db) throw new Error('Firebase is not configured')
+  const ref = doc(db, 'plants', tagId)
+  const clean = { ...patch, updatedAt: serverTimestamp() }
+  delete clean.id
+  delete clean.tagId
+  delete clean.createdAt
   for (const k of Object.keys(clean)) {
     if (clean[k] === undefined) delete clean[k]
   }
   await updateDoc(ref, clean)
 }
 
-export async function createPlant(payload) {
+export async function deleteNfcPlantDocument(tagId) {
   const db = getDb()
   if (!db) throw new Error('Firebase is not configured')
-
-  const groupId = payload.groupId
-  if (!groupId) throw new Error('groupId is required to create a plant')
-
-  const now = serverTimestamp()
-  const interval = getPlantIntervalDays(payload)
-  const nextDue =
-    payload.nextWaterDue ?? addDaysTimestamp(new Date(), interval)
-
-  const initHydration =
-    payload.hydrationScore ??
-    payload.waterLevel ??
-    100
-
-  await addDoc(collection(db, 'plants'), {
-    groupId,
-    name: payload.name,
-    displayName: payload.displayName ?? payload.name ?? '',
-    type: payload.type ?? '',
-    location: payload.location ?? 'indoor',
-    potSize: payload.potSize !== undefined && payload.potSize !== null
-      ? payload.potSize
-      : '',
-    imageUrl: payload.imageUrl ?? null,
-    wateringIntervalDays:
-      payload.wateringIntervalDays ?? payload.wateringFrequencyDays ?? 7,
-    wateringFrequencyDays:
-      payload.wateringFrequencyDays ?? payload.wateringIntervalDays ?? 7,
-    waterAmountText:
-      payload.waterAmountText ?? payload.waterAmount ?? '',
-    waterAmount: payload.waterAmount ?? payload.waterAmountText ?? '',
-    howToWaterText:
-      payload.howToWaterText ?? payload.wateringMethod ?? '',
-    wateringMethod:
-      payload.wateringMethod ?? payload.howToWaterText ?? '',
-    warningSignsText:
-      payload.warningSignsText ?? payload.warningSign ?? '',
-    warningSign: payload.warningSign ?? payload.warningSignsText ?? '',
-    careMatchQuality: payload.careMatchQuality ?? 'general',
-    scheduleNote: payload.scheduleNote ?? '',
-    totalWaterCount: payload.totalWaterCount ?? 0,
-    lastWatered: payload.lastWatered ?? null,
-    nextWaterDue: nextDue,
-    hydrationScore: initHydration,
-    hydrationCalculatedAt: now,
-    weatherAdjustmentNote: payload.weatherAdjustmentNote ?? null,
-    waterLevel: initHydration,
-    waterBalanceUpdatedAt: now,
-    rainMmBalanceSnapshot:
-      typeof payload.rainMmBalanceSnapshot === 'number'
-        ? payload.rainMmBalanceSnapshot
-        : 0,
-    lastRainAt: payload.lastRainAt ?? null,
-    lastRainAmount: payload.lastRainAmount ?? null,
-    rainContribution: payload.rainContribution ?? null,
-    notes: payload.notes ?? '',
-    createdAt: now,
-    scientificName: payload.scientificName ?? '',
-    aiIdentifiedScientificName: payload.aiIdentifiedScientificName ?? null,
-    detectedType: payload.detectedType ?? '',
-    matchKind: payload.matchKind ?? null,
-    sceneType: payload.sceneType ?? null,
-    confidence: payload.confidence ?? null,
-    aiGenerated: payload.aiGenerated ?? false,
-    imageAnalyzedAt: payload.aiGenerated ? now : null,
-    aiCorrectedByUser: payload.aiCorrectedByUser ?? false,
-    aiSuggestedDisplayName: payload.aiSuggestedDisplayName ?? null,
-    fallbackUsed: payload.fallbackUsed ?? false,
-  })
+  await deleteDoc(doc(db, 'plants', tagId))
 }
 
-export async function savePlant(id, payload) {
-  const db = getDb()
-  if (!db) throw new Error('Firebase is not configured')
-  const ref = doc(db, 'plants', id)
-  const patch = { ...payload }
-  delete patch.id
-  delete patch.createdAt
-  for (const k of Object.keys(patch)) {
-    if (patch[k] === undefined) delete patch[k]
-  }
-  await updateDoc(ref, patch)
-}
-
-export async function removePlant(id) {
-  const db = getDb()
-  if (!db) throw new Error('Firebase is not configured')
-  await deleteDoc(doc(db, 'plants', id))
-}
-
-export async function logWatering(plantId, weatherDelayApplied, groupId) {
-  const db = getDb()
-  if (!db) throw new Error('Firebase is not configured')
-  if (!groupId) throw new Error('groupId is required for watering log')
-
-  await addDoc(collection(db, 'watering_log'), {
-    groupId,
-    plantId,
-    wateredAt: serverTimestamp(),
-    weatherDelayApplied: !!weatherDelayApplied,
-  })
-}
-
-export async function recordWatering(plant, outdoorDelayDays, options = {}) {
+/**
+ * Log watering: updates timestamps and optional hydration-free fields.
+ */
+export async function recordNfcPlantWatering(tagId, wateringIntervalDays) {
   const db = getDb()
   if (!db) throw new Error('Firebase is not configured')
   const now = new Date()
-  const baseInterval = getPlantIntervalDays(plant)
-  const nextCount = (plant.totalWaterCount ?? 0) + 1
-  const jitter = computeJitterDays(plant.id || plant.name, nextCount)
-  const interval = baseInterval + jitter
+  const interval = Math.max(1, Math.round(Number(wateringIntervalDays)) || 7)
   const nextDue = addDaysTimestamp(now, interval)
-  const ref = doc(db, 'plants', plant.id)
-  const groupId = normalizeStoredGroupId(plant.groupId)
-
-  const rainSnap =
-    typeof options.rainMmSnapshot === 'number' ? options.rainMmSnapshot : 0
+  const ref = doc(db, 'plants', tagId)
 
   await updateDoc(ref, {
+    lastWateredAt: Timestamp.fromDate(now),
     lastWatered: Timestamp.fromDate(now),
     nextWaterDue: nextDue,
     totalWaterCount: increment(1),
-    hydrationScore: 98,
-    hydrationCalculatedAt: Timestamp.fromDate(now),
-    waterLevel: 98,
-    waterBalanceUpdatedAt: Timestamp.fromDate(now),
-    rainMmBalanceSnapshot: rainSnap,
-    weatherAdjustmentNote: null,
+    updatedAt: serverTimestamp(),
   })
-  await logWatering(
-    plant.id,
-    plant.location === 'outdoor' && outdoorDelayDays > 0,
-    groupId,
+
+  await addDoc(collection(db, 'watering_log'), {
+    tagId,
+    plantId: tagId,
+    wateredAt: serverTimestamp(),
+  })
+}
+
+/**
+ * Recent watering events for this tag (newest first).
+ */
+export function subscribeWateringLogForTag(tagId, onData, onError) {
+  const db = getDb()
+  if (!db) {
+    onData([])
+    return () => {}
+  }
+  const q = query(
+    collection(db, 'watering_log'),
+    where('tagId', '==', tagId),
+    limit(40),
+  )
+  return onSnapshot(
+    q,
+    (snap) => {
+      const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }))
+      rows.sort((a, b) => {
+        const ta = a.wateredAt?.toMillis?.() ?? 0
+        const tb = b.wateredAt?.toMillis?.() ?? 0
+        return tb - ta
+      })
+      onData(rows)
+    },
+    (err) => onError?.(err),
   )
 }
