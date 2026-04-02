@@ -182,6 +182,17 @@ export function NfcPlantDashboard({
           <span className="nfc-status-soil">{status.soilHelper}</span>
         </div>
 
+        <div className="nfc-plant-cta-wrap">
+          <button
+            type="button"
+            className="nfc-btn nfc-btn-water"
+            disabled={waterBusy}
+            onClick={onWater}
+          >
+            {waterBusy ? 'Saving…' : 'I watered this plant'}
+          </button>
+        </div>
+
         <div className="nfc-divider" aria-hidden />
 
         <div className="nfc-meta-block">
@@ -220,15 +231,6 @@ export function NfcPlantDashboard({
             </div>
           ) : null}
         </section>
-
-        <button
-          type="button"
-          className="nfc-btn nfc-btn-water"
-          disabled={waterBusy}
-          onClick={onWater}
-        >
-          {waterBusy ? 'Saving…' : 'I watered this plant'}
-        </button>
 
         <div className="nfc-secondary-actions">
           <button
