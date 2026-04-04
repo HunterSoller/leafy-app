@@ -137,7 +137,7 @@ export function NfcSetupFlow({ configured, createPlant, onCreated }) {
         aiResult.typeLabel || aiResult.displayName || 'Plant',
       ).trim()
       const display = String(customName.trim() || identified).trim()
-      await createPlant({
+      const newId = await createPlant({
         customName: customName.trim() || '',
         identifiedPlantName: identified,
         canonicalPlantName: aiResult.canonicalPlantName ?? '',
@@ -165,7 +165,7 @@ export function NfcSetupFlow({ configured, createPlant, onCreated }) {
         detectedType: aiResult.detectedType,
         scientificName: aiResult.scientificName || '',
       })
-      onCreated?.()
+      onCreated?.(newId)
     } catch (err) {
       setSaveError(
         err?.message ||

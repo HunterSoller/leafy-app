@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import {
   getIndoorWateringStatus,
   formatLastWateredHuman,
   getStructuredCare,
   toJsDate,
 } from '../lib/indoorWatering'
-import { subscribeWateringLogForTag } from '../lib/firebase'
+import { subscribeWateringLogForPlant } from '../lib/firebase'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import {
   getProfileByCanonicalName,
@@ -27,6 +28,7 @@ function formatLogRow(row) {
 }
 
 export function NfcPlantDashboard({
+  groupId,
   plant,
   waterPlant,
   updatePlant,
@@ -93,10 +95,17 @@ export function NfcPlantDashboard({
 
   const care = useMemo(() => getStructuredCare(effectivePlant), [effectivePlant])
 
+  const plantKey = plant.plantId || plant.id
+
   useEffect(() => {
-    if (!historyOpen || !plant.tagId) return undefined
-    return subscribeWateringLogForTag(plant.tagId, setLog, () => setLog([]))
-  }, [historyOpen, plant.tagId])
+    if (!historyOpen || !groupId || !plantKey) return undefined
+    return subscribeWateringLogForPlant(
+      groupId,
+      plantKey,
+      setLog,
+      () => setLog([]),
+    )
+  }, [historyOpen, groupId, plantKey])
 
   useEffect(() => {
     setEditName(plant.displayName || plant.name || '')
@@ -167,11 +176,21 @@ export function NfcPlantDashboard({
 
   return (
     <div className="nfc-shell nfc-plant">
-      <header className="nfc-plant-header">
-        <span className="nfc-brand-leaf" aria-hidden>
-          🌿
-        </span>
-        <span className="nfc-brand-word">Leafy</span>
+      <header className="nfc-plant-header nfc-plant-header--row">
+        <div className="nfc-plant-header-brand">
+          <span className="nfc-brand-leaf" aria-hidden>
+            🌿
+          </span>
+          <span className="nfc-brand-word">Leafy</span>
+        </div>
+        {groupId ? (
+          <Link
+            className="nfc-back-link"
+            to={`/group/${encodeURIComponent(groupId)}`}
+          >
+            All plants
+          </Link>
+        ) : null}
       </header>
 
       <div className="nfc-plant-hero">

@@ -1,3 +1,9 @@
+/**
+ * Leafy Firestore layout (strict `groupId` separation):
+ * - groups/{groupId}/plants/{plantId}
+ * - groups/{groupId}/watering_log/{eventId}  (fields: groupId, plantId, wateredAt)
+ * - groups/{groupId}/settings/main          (optional; per-group notes / location)
+ */
 import { initializeApp } from 'firebase/app'
 import {
   getFirestore,
@@ -60,20 +66,129 @@ export function addDaysTimestamp(from, days) {
   return Timestamp.fromDate(next)
 }
 
+function plantPayloadFromCreate(groupId, payload, now) {
+  const interval = Math.max(
+    1,
+    Math.min(30, Math.round(Number(payload.wateringIntervalDays)) || 7),
+  )
+  return {
+    groupId,
+    version: 1,
+    setupComplete: true,
+    location: 'indoor',
+
+    customName: payload.customName ?? '',
+    identifiedPlantName: payload.identifiedPlantName ?? '',
+    canonicalPlantName: payload.canonicalPlantName ?? '',
+    displayName: payload.displayName ?? payload.identifiedPlantName ?? 'Plant',
+    name: payload.displayName ?? payload.identifiedPlantName ?? 'Plant',
+    type: payload.type ?? payload.canonicalPlantName ?? payload.identifiedPlantName ?? '',
+
+    imageUrl: payload.imageUrl ?? null,
+    wateringIntervalDays: interval,
+    wateringFrequencyDays: interval,
+    displayWaterRange: payload.displayWaterRange ?? '',
+
+    careSummary: payload.careSummary ?? '',
+    careLightLine: payload.careLightLine ?? '',
+    careLightBullets: Array.isArray(payload.careLightBullets)
+      ? payload.careLightBullets
+      : [],
+    careWaterBullets: Array.isArray(payload.careWaterBullets)
+      ? payload.careWaterBullets
+      : [],
+    careExtraBullets: Array.isArray(payload.careExtraBullets)
+      ? payload.careExtraBullets
+      : [],
+    careProfileFallback: Boolean(payload.careProfileFallback),
+    careScheduleNote: payload.careScheduleNote ?? '',
+    notes: payload.notes ?? '',
+
+    waterAmountText: payload.waterAmountText ?? '',
+    howToWaterText: payload.howToWaterText ?? '',
+    warningSignsText: payload.warningSignsText ?? '',
+
+    lastWateredAt: null,
+    lastWatered: null,
+    nextWaterDue: null,
+
+    aiConfidence: payload.aiConfidence ?? null,
+    aiMatchKind: payload.aiMatchKind ?? null,
+    detectedType: payload.detectedType ?? '',
+    scientificName: payload.scientificName ?? '',
+
+    totalWaterCount: 0,
+    createdAt: now,
+    updatedAt: now,
+  }
+}
+
 /**
- * Real-time subscription: one plant document per NFC tag at `plants/{tagId}`.
- * @param {string} tagId
- * @param {(data: object | null) => void} onData - null if document missing
+ * All plants in one NFC group / tag space: `groups/{groupId}/plants/*`
+ * @param {string} groupId
+ * @param {(rows: object[]) => void} onData
  * @param {(err: Error) => void} [onError]
  */
-export function subscribeNfcPlant(tagId, onData, onError) {
+export function subscribeGroupPlants(groupId, onData, onError) {
+  const db = getDb()
+  if (!db) {
+    onData([])
+    return () => {}
+  }
+
+  const ref = collection(db, 'groups', groupId, 'plants')
+  return onSnapshot(
+    ref,
+    (snap) => {
+      const rows = snap.docs.map((d) => {
+        const id = d.id
+        return {
+          id,
+          plantId: id,
+          groupId,
+          tagId: id,
+          ...d.data(),
+        }
+      })
+      rows.sort((a, b) => {
+        const na = String(a.displayName || a.name || '').toLowerCase()
+        const nb = String(b.displayName || b.name || '').toLowerCase()
+        return na.localeCompare(nb)
+      })
+      onData(rows)
+    },
+    (err) => onError?.(err),
+  )
+}
+
+/**
+ * @returns {Promise<string>} new plant document id
+ */
+export async function createGroupPlantDocument(groupId, payload) {
+  const db = getDb()
+  if (!db) throw new Error('Firebase is not configured')
+
+  const now = serverTimestamp()
+  const body = plantPayloadFromCreate(groupId, payload, now)
+  const colRef = collection(db, 'groups', groupId, 'plants')
+  const docRef = await addDoc(colRef, body)
+  return docRef.id
+}
+
+/**
+ * @param {string} groupId
+ * @param {string} plantId
+ * @param {(data: object | null) => void} onData
+ * @param {(err: Error) => void} [onError]
+ */
+export function subscribeGroupPlant(groupId, plantId, onData, onError) {
   const db = getDb()
   if (!db) {
     onData(null)
     return () => {}
   }
 
-  const ref = doc(db, 'plants', tagId)
+  const ref = doc(db, 'groups', groupId, 'plants', plantId)
   return onSnapshot(
     ref,
     (snap) => {
@@ -81,87 +196,27 @@ export function subscribeNfcPlant(tagId, onData, onError) {
         onData(null)
         return
       }
-      onData({ id: tagId, tagId, ...snap.data() })
+      const id = snap.id
+      onData({
+        id,
+        plantId: id,
+        groupId,
+        tagId: id,
+        ...snap.data(),
+      })
     },
     (err) => onError?.(err),
   )
 }
 
-/**
- * First-time setup: create the plant record for this tag (document id = tagId).
- */
-export async function createNfcPlantDocument(tagId, payload) {
+export async function updateGroupPlantDocument(groupId, plantId, patch) {
   const db = getDb()
   if (!db) throw new Error('Firebase is not configured')
-
-  const now = serverTimestamp()
-  const interval = Math.max(
-    1,
-    Math.min(30, Math.round(Number(payload.wateringIntervalDays)) || 7),
-  )
-
-  await setDoc(
-    doc(db, 'plants', tagId),
-    {
-      tagId,
-      version: 1,
-      setupComplete: true,
-      location: 'indoor',
-
-      customName: payload.customName ?? '',
-      identifiedPlantName: payload.identifiedPlantName ?? '',
-      canonicalPlantName: payload.canonicalPlantName ?? '',
-      displayName: payload.displayName ?? payload.identifiedPlantName ?? 'Plant',
-      name: payload.displayName ?? payload.identifiedPlantName ?? 'Plant',
-      type: payload.type ?? payload.canonicalPlantName ?? payload.identifiedPlantName ?? '',
-
-      imageUrl: payload.imageUrl ?? null,
-      wateringIntervalDays: interval,
-      wateringFrequencyDays: interval,
-      displayWaterRange: payload.displayWaterRange ?? '',
-
-      careSummary: payload.careSummary ?? '',
-      careLightLine: payload.careLightLine ?? '',
-      careLightBullets: Array.isArray(payload.careLightBullets)
-        ? payload.careLightBullets
-        : [],
-      careWaterBullets: Array.isArray(payload.careWaterBullets)
-        ? payload.careWaterBullets
-        : [],
-      careExtraBullets: Array.isArray(payload.careExtraBullets)
-        ? payload.careExtraBullets
-        : [],
-      careProfileFallback: Boolean(payload.careProfileFallback),
-      careScheduleNote: payload.careScheduleNote ?? '',
-      notes: payload.notes ?? '',
-
-      waterAmountText: payload.waterAmountText ?? '',
-      howToWaterText: payload.howToWaterText ?? '',
-      warningSignsText: payload.warningSignsText ?? '',
-
-      lastWateredAt: null,
-      lastWatered: null,
-      nextWaterDue: null,
-
-      aiConfidence: payload.aiConfidence ?? null,
-      aiMatchKind: payload.aiMatchKind ?? null,
-      detectedType: payload.detectedType ?? '',
-      scientificName: payload.scientificName ?? '',
-
-      totalWaterCount: 0,
-      createdAt: now,
-      updatedAt: now,
-    },
-    { merge: false },
-  )
-}
-
-export async function updateNfcPlantDocument(tagId, patch) {
-  const db = getDb()
-  if (!db) throw new Error('Firebase is not configured')
-  const ref = doc(db, 'plants', tagId)
+  const ref = doc(db, 'groups', groupId, 'plants', plantId)
   const clean = { ...patch, updatedAt: serverTimestamp() }
   delete clean.id
+  delete clean.plantId
+  delete clean.groupId
   delete clean.tagId
   delete clean.createdAt
   for (const k of Object.keys(clean)) {
@@ -170,22 +225,22 @@ export async function updateNfcPlantDocument(tagId, patch) {
   await updateDoc(ref, clean)
 }
 
-export async function deleteNfcPlantDocument(tagId) {
+export async function deleteGroupPlantDocument(groupId, plantId) {
   const db = getDb()
   if (!db) throw new Error('Firebase is not configured')
-  await deleteDoc(doc(db, 'plants', tagId))
+  await deleteDoc(doc(db, 'groups', groupId, 'plants', plantId))
 }
 
-/**
- * Log watering: updates timestamps and optional hydration-free fields.
- */
-export async function recordNfcPlantWatering(tagId, wateringIntervalDays) {
+export async function recordGroupPlantWatering(groupId, plantId, wateringIntervalDays) {
   const db = getDb()
   if (!db) throw new Error('Firebase is not configured')
   const now = new Date()
-  const interval = Math.max(1, Math.min(30, Math.round(Number(wateringIntervalDays)) || 7))
+  const interval = Math.max(
+    1,
+    Math.min(30, Math.round(Number(wateringIntervalDays)) || 7),
+  )
   const nextDue = addDaysTimestamp(now, interval)
-  const ref = doc(db, 'plants', tagId)
+  const ref = doc(db, 'groups', groupId, 'plants', plantId)
 
   await updateDoc(ref, {
     lastWateredAt: Timestamp.fromDate(now),
@@ -195,26 +250,26 @@ export async function recordNfcPlantWatering(tagId, wateringIntervalDays) {
     updatedAt: serverTimestamp(),
   })
 
-  await addDoc(collection(db, 'watering_log'), {
-    tagId,
-    plantId: tagId,
+  await addDoc(collection(db, 'groups', groupId, 'watering_log'), {
+    groupId,
+    plantId,
     wateredAt: serverTimestamp(),
   })
 }
 
 /**
- * Recent watering events for this tag (newest first).
+ * Watering history for one plant within a group (newest first, client-sorted).
  */
-export function subscribeWateringLogForTag(tagId, onData, onError) {
+export function subscribeWateringLogForPlant(groupId, plantId, onData, onError) {
   const db = getDb()
   if (!db) {
     onData([])
     return () => {}
   }
   const q = query(
-    collection(db, 'watering_log'),
-    where('tagId', '==', tagId),
-    limit(40),
+    collection(db, 'groups', groupId, 'watering_log'),
+    where('plantId', '==', plantId),
+    limit(60),
   )
   return onSnapshot(
     q,
@@ -229,4 +284,48 @@ export function subscribeWateringLogForTag(tagId, onData, onError) {
     },
     (err) => onError?.(err),
   )
+}
+
+const GROUP_SETTINGS_DOC = 'main'
+
+/**
+ * Optional per-group settings / location note: `groups/{groupId}/settings/main`
+ * @param {string} groupId
+ * @param {(data: object | null) => void} onData
+ * @param {(err: Error) => void} [onError]
+ */
+export function subscribeGroupSettingsMain(groupId, onData, onError) {
+  const db = getDb()
+  if (!db) {
+    onData(null)
+    return () => {}
+  }
+  const ref = doc(db, 'groups', groupId, 'settings', GROUP_SETTINGS_DOC)
+  return onSnapshot(
+    ref,
+    (snap) => {
+      if (!snap.exists()) {
+        onData(null)
+        return
+      }
+      onData({ id: snap.id, groupId, ...snap.data() })
+    },
+    (err) => onError?.(err),
+  )
+}
+
+/**
+ * @param {string} groupId
+ * @param {Record<string, unknown>} patch
+ */
+export async function updateGroupSettingsMain(groupId, patch) {
+  const db = getDb()
+  if (!db) throw new Error('Firebase is not configured')
+  const ref = doc(db, 'groups', groupId, 'settings', GROUP_SETTINGS_DOC)
+  const clean = { ...patch, groupId, updatedAt: serverTimestamp() }
+  delete clean.id
+  for (const k of Object.keys(clean)) {
+    if (clean[k] === undefined) delete clean[k]
+  }
+  await setDoc(ref, clean, { merge: true })
 }
